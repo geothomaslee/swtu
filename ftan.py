@@ -23,6 +23,9 @@ from math import floor
 import obspy
 from obspy import Trace
 from tqdm import tqdm
+import pandas as pd
+import matplotlib.pyplot as plt
+import numpy as np
 
 
 def getStackDirectory(dataDirectory):
@@ -87,6 +90,7 @@ def foldTrace(tr):
     return new_tr
 
 def foldAllTraces(dataDirectory,component):
+    """Folds all traces and puts them in separate folded directory"""
     foldDirectory = getFoldDirectory(dataDirectory,component)
     componentDirectory = getComponentDirectory(dataDirectory,component)
 
@@ -100,12 +104,51 @@ def foldAllTraces(dataDirectory,component):
         folded_tr.write(savePath)
 
 
+def dispOutputToDF(file):
+    columns=['nf','cper','obper','gvel','phvel','ampl','snr']
+    df = pd.read_csv(file,delim_whitespace=True,names=columns)
+    return df
 
-dataDirectory = '/Volumes/NewHDant/RainierAmbient'
+def findDispFiles(dispDirectory):
+    fileList = glob(dispDirectory + '/*2_DISP.1*')
+    return fileList
 
-foldAllTraces(dataDirectory,'ZZ')
+def getRelevantInfo(df):
+    obper = df['obper'].to_list()
+    phvel = df['phvel'].to_list()
+    snr = df['snr'].to_list()
+    return obper,phvel,snr
+
+def getPeriodRange(df):
+    vals = df['obper'].to_list()
+    return min(vals),max(vals)
+
+"""
+files = findDispFiles('/Users/thomaslee/FTAN/Folded')
+
+minpers = []
+maxpers = []
+for file in tqdm(files):
+    minper,maxper = getPeriodRange(dispOutputToDF(file))
+    minpers.append(minper)
+    maxpers.append(maxper)
+
+plt.hist(minpers,bins=np.arange(0,10,0.5))
+plt.title('Minimum Period')
+plt.xlim(0,10)
+plt.show()
+
+plt.hist(maxpers,bins=np.arange(0,25,0.5))
+plt.title('Maximum Period')
+plt.xlim(0,25)
+plt.show()
 
 
+
+#dataDirectory = '/Volumes/NewHDant/RainierAmbient'
+#foldAllTraces(dataDirectory,'ZZ')
+
+"""
 
 
 

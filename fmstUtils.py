@@ -19,10 +19,11 @@ from glob import glob
 from tqdm import tqdm
 
 import numpy as np
-import pyaftan_tools as pt
 import obspy
 from obspy.clients.fdsn import Client
 import matplotlib.pyplot as plt
+
+import ftan as ft
 
 
 def saveObj(obj, filename):
@@ -58,6 +59,14 @@ def getTomoDirectory(dataDirectory,component):
 
     return os.path.expanduser(dataDirectory + f'/Tomography/{component}')
 
+def getStationNames(filepath):
+    """Pulls the name of the two stations from the name of the file"""
+    basename = os.path.basename(filepath)
+    name_no_sac = basename[:-4]
+    stat1, stat2 = name_no_sac.split('_')
+
+    return stat1, stat2
+
 def getLocalStations(dataDirectory,component):
     """Returns a list of stations that we have cross-correlations for"""
     componentDirectory = getComponentDirectory(dataDirectory,component)
@@ -66,7 +75,7 @@ def getLocalStations(dataDirectory,component):
         crossCorrelations = glob(componentDirectory + '/*.sac')
         station_list = []
         for file in crossCorrelations:
-            stat1, stat2 = pt.getStationNames(file)
+            stat1, stat2 = getStationNames(file)
 
             station_list = [s for s in set(station_list + [stat1, stat2]) if s]
             saveObj(station_list,componentDirectory +'/UniqueStations.pkl')
@@ -162,18 +171,16 @@ def makeInterpErrorDict():
     """Makes an error dictionary for interpolating the period"""
     interpErrorDict = {'lowest observed period greater than desired' : 0,
                        'highest observed period lower than desired' : 0,
-                       'could not find left or right' : 0,
-                       'unreasonable phvel from interp' : 0,
-                       'unreasonable snr' : 0,
-                       'bad left phvel' : 0,
-                       'bad right phvel' : 0}
+                       'could not find left or right' : 0}
     return interpErrorDict
 
-def makeFMSTInputs(stationDict,dataDirectory,period,component,minSNR,minWavelengths):
+def makeFMSTInputs(stationDict,dataDirectory,FTANDirectory,period,component,minSNR,minWavelengths,detailedError=True):
+    # Get directories
     tomoDirectory = getTomoDirectory(dataDirectory,component)
-    componentDirectory = getComponentDirectory(dataDirectory,component)
     periodDirectory = tomoDirectory + f'/{period}s'
+    componentDirectory = getComponentDirectory(dataDirectory,component)
 
+    # Get filepaths for output files
     receiverFile = periodDirectory +'/receivers.dat'
     sourcesFile = periodDirectory +'/sources.dat'
     timesFile = periodDirectory + '/otimes.dat'
@@ -183,22 +190,26 @@ def makeFMSTInputs(stationDict,dataDirectory,period,component,minSNR,minWaveleng
     fpDict = makefpDict()
     interpErrorDict = makeInterpErrorDict()
 
-    open(receiverFile,'w').close()
-    with open(receiverFile, 'a') as file:
+    # Create receiver file
+    open(receiverFile,'w',encoding='utf-8').close()
+    with open(receiverFile, 'a',encoding='utf-8') as file:
         for station, coords in stationDict.items():
             file.write(f'{coords[0]} {coords[1]}\n')
         file.close()
 
-    open(sourcesFile,'w').close()
-    with open(sourcesFile, 'a') as file:
+    # Create source file
+    open(sourcesFile,'w',encoding='utf-8').close()
+    with open(sourcesFile, 'a',encoding='utf-8') as file:
         for station, coords in stationDict.items():
             file.write(f'{coords[0]} {coords[1]}\n')
         file.close()
 
     stationList = list(stationDict.keys())
 
+    open(timesFile,'w',encoding='utf-8').close()
 
-    with open(timesFile, 'a') as outfile:
+    phvels = []
+    with open(timesFile, 'a',encoding='utf-8') as outfile:
         for i, stat1 in tqdm(enumerate(stationList),total=len(stationList)):
             for j, stat2 in enumerate(stationList):
                 if stat1 == stat2:
@@ -206,23 +217,22 @@ def makeFMSTInputs(stationDict,dataDirectory,period,component,minSNR,minWaveleng
                     outfile.write('0 0.0000 1.0\n')
                     continue
 
-                filepath = checkIfCorrelationExists(stat1,stat2,componentDirectory)
+                filepath = checkIfFTANExists(stat1,stat2,FTANDirectory)
                 if filepath is None:
                     issue_dict['filepath not exist'] += 1
                     outfile.write('0 0.0000 1.0\n')
                     continue
 
-                fparam_out = pt.FTAN(filepath,tmin=1,tmax=40,nfin=41)
-                fparam_out, fpDict = _fparamErrorCodeHandler(fparam_out,fpDict,outfile)
-                if fparam_out is None:
-                    issue_dict['fparam_out_none'] += 1
+                dist = getDist(stat1,stat2,componentDirectory)
+                if dist is None:
+                    issue_dict['filepath not exist'] += 1
+                    outfile.write('0 0.0000 1.0\n')
                     continue
 
-                fparam = fparam_out[0]
-                dist = fparam_out[1]
-                obper1, gvel1, phvel1, snr = pt.pullRelevantFTANInfo(fparam)
+                df = ft.dispOutputToDF(filepath)
+                obper,phvel,snr = ft.getRelevantInfo(df)
 
-                interpOut = interpPeriod(period,obper1,phvel1,snr)
+                interpOut = interpPeriod(period,obper,phvel,snr)
                 interpOut, interpErrorDict = _interpPeriodErrorHandler(interpOut,interpErrorDict)
                 if interpOut is None:
                     issue_dict['interpOut none'] += 1
@@ -248,14 +258,18 @@ def makeFMSTInputs(stationDict,dataDirectory,period,component,minSNR,minWaveleng
                     outfile.write('0 0.0000 1.0\n')
                     continue
 
-                good_phvel_list.append(phvel)
-                good_snr_list.append(snr)
+                phvels.append(phvel)
 
                 travelTime = round(float(getTravelTime(phvel,dist)), 4)
                 issue_dict['good'] += 1
                 outfile.write(f'1.0 {travelTime} 1.0\n')
 
-    return issue_dict, fpDict, interpErrorDict, good_phvel_list, good_snr_list
+    if detailedError is True:
+        saveObj(issue_dict, f'{periodDirectory}/issueDict.pkl')
+        saveObj(fpDict, f'{periodDirectory}/fpDict.pkl')
+        saveObj(interpErrorDict,f'{periodDirectory}/interpErrorDict.pkl')
+
+    return phvels
 
 def _fparamErrorCodeHandler(fparam_out,fpDict,outfile):
     """Counts the types of errors from fparam"""
@@ -283,43 +297,28 @@ def _fparamErrorCodeHandler(fparam_out,fpDict,outfile):
 
     return None, fpDict
 
-def interpPeriod(period,obper1,phvel1,snr):
+def interpPeriod(period,obper,phvel,snr):
     """Interpolates the phase velocity and snr to the period of interest"""
-    if obper1[0] > period:
+    if obper[0] > period:
         return 1
 
-    if obper1[-1] < period:
+    if obper[-1] < period:
         return 2
 
     left = None
     right = None
-    for i, obper in enumerate(obper1):
-        if obper < period:
+    for i, per in enumerate(obper):
+        if per < period:
             left = i
-        if obper > period:
+        if per > period:
             right = i
             break
 
     if left is None or right is None:
         return 3
 
-    if phvel1[left] < 1.5:
-        left -= 1
-
-    if phvel1[left] < 1.5:
-        return 6
-
-    if phvel1[right] < 1.5 or phvel1[right] > 5:
-        return 7
-
-    if snr[left] < 2 or snr[right] < 2:
-        return 5
-
-    interpPhvel = np.interp(period,[obper1[left],obper1[right]],[phvel1[left],phvel1[right]])
-    interpSNR = np.interp(period,[obper1[left],obper1[right]],[snr[left],snr[right]])
-
-    if interpPhvel < 1.5 or interpPhvel > 5:
-        return 4
+    interpPhvel = np.interp(period,[obper[left],obper[right]],[phvel[left],phvel[right]])
+    interpSNR = np.interp(period,[obper[left],obper[right]],[snr[left],snr[right]])
 
     return interpPhvel,interpSNR
 
@@ -334,23 +333,24 @@ def _interpPeriodErrorHandler(interpPeriodOut,interpPeriodDict):
         interpPeriodDict['highest observed period lower than desired'] += 1
     if interpPeriodOut == 3:
         interpPeriodDict['could not find left or right'] += 1
-    if interpPeriodOut == 4:
-        interpPeriodDict['unreasonable phvel from interp'] += 1
-    if interpPeriodOut == 5:
-        interpPeriodDict['unreasonable snr'] += 1
-    if interpPeriodOut == 6:
-        interpPeriodDict['bad left phvel'] += 1
-    if interpPeriodOut == 7:
-        interpPeriodDict['bad right phvel'] += 1
 
     return None, interpPeriodDict
 
-def checkIfCorrelationExists(stat1,stat2,componentDirectory):
+def checkIfFTANExists(stat1,stat2,FTANDirectory):
+    if os.path.exists(FTANDirectory + f'/{stat1}_{stat2}_Folded.sac_2_DISP.1'):
+        return FTANDirectory + f'/{stat1}_{stat2}_Folded.sac_2_DISP.1'
+
+    if os.path.exists(FTANDirectory + f'/{stat2}_{stat1}_Folded.sac_2_DISP.1'):
+        return FTANDirectory + f'/{stat2}_{stat1}_Folded.sac_2_DISP.1'
+
+    return None
+
+def getDist(stat1,stat2,componentDirectory):
     if os.path.exists(componentDirectory + f'/{stat1}_{stat2}.sac'):
-        return componentDirectory + f'/{stat1}_{stat2}.sac'
+        return obspy.read(componentDirectory + f'/{stat1}_{stat2}.sac')[0].stats.sac['dist']
 
     if os.path.exists(componentDirectory + f'/{stat2}_{stat1}.sac'):
-        return componentDirectory + f'/{stat2}_{stat1}.sac'
+        return obspy.read(componentDirectory + f'/{stat2}_{stat1}.sac')[0].stats.sac['dist']
 
     return None
 
@@ -384,38 +384,20 @@ dataDirectory = '/Volumes/NewHDant/RainierAmbient'
 stationList = getLocalStations(dataDirectory,'ZZ')
 stationDict = getValidStations(network,bound_box,channel,stationList)
 
-shortenedDict = {k: v for k, v in list(stationDict.items())[:20]}
 
-periods = [5]
-makeTomoDirectory(dataDirectory,periods=periods,component='ZZ')
+phvels = makeFMSTInputs(stationDict=stationDict,
+                        dataDirectory=dataDirectory,
+                        FTANDirectory='/Users/thomaslee/FTAN/Folded',
+                        period=5,
+                        component='ZZ',
+                        minSNR=5,
+                        minWavelengths=1.5,
+                        detailedError=True)
 
-avg_list = []
-for period in periods:
-    issue_dict, fpDict, interpErrorDict, good_phvel_list, good_snr_list = good_count = makeFMSTInputs(stationDict,dataDirectory,
-                                             period=period,
-                                             component='ZZ',
-                                             minSNR=5,
-                                             minWavelengths=2)
-    avg_list.append(np.mean(good_phvel_list))
+plt.hist(phvels,bins=np.arange(1.5,5,0.2))
+plt.title('5s Rayleigh Wave Phase Velocities')
+plt.xlabel('Phase Velocity (km/s)')
 
-plt.plot(periods,avg_list)
-plt.title('Avg Phase Velocity Over Study Area')
-plt.xlabel('Period (s)')
-plt.ylabel('Phase Velocity (km/s)')
-
-"""
-plotIssueDict(issue_dict,'Overall Issues')
-plotIssueDict(fpDict,'FTAN Issues')
-plotIssueDict(interpErrorDict,'Interpolation Issues')
-
-plt.hist(good_phvel_list)
-plt.title('Measured phase velocities at 5s')
-plt.show()
-plt.hist(good_snr_list)
-plt.show()
-
-print(f'mean of phase vels: {np.mean(good_phvel_list)}')
-print(f'std of phase vels: {np.std(good_phvel_list)}')
-
-#46.875 -121.625    0.250 -0.322976E+01 2.96 = 2.009 km/s
-"""
+print(loadObj(f'/Volumes/NewHDant/RainierAmbient/Tomography/ZZ/5s/interpErrorDict.pkl'))
+print(loadObj(f'/Volumes/NewHDant/RainierAmbient/Tomography/ZZ/5s/issueDict.pkl'))
+print(loadObj(f'/Volumes/NewHDant/RainierAmbient/Tomography/ZZ/5s/fpDict.pkl'))

@@ -20,7 +20,7 @@ from cartopy.mpl.gridliner import LONGITUDE_FORMATTER, LATITUDE_FORMATTER
 import numpy as np
 from tqdm import tqdm
 
-import pyaftanUtils as pt #pylint: disable=import-error
+from . import ftan as ft
 
 def getStackDirectory(dataDirectory):
     """Returns the stack directory given the data directoy"""
