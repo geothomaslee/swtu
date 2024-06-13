@@ -339,7 +339,7 @@ def plot_tomo(tomo, c, period, box = None,fig_size=(5, 7), cm='jet_r',veltype='g
     ax.set_extent(map_boundaries, ccrs.PlateCarree()) # had a backslash at the end
     if veltype == 'g':
         ax.set_title(f'Group Velocity of {period}s Rayleigh Waves')
-    if veltype == 'p':
+    elif veltype == 'p':
         ax.set_title(f'Phase Velocity of {period}s Rayleigh Waves')
     else:
         print(veltype)
