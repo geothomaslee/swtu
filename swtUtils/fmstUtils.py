@@ -24,7 +24,7 @@ import obspy
 from obspy.clients.fdsn import Client
 import matplotlib.pyplot as plt
 
-import swtUtils.ftan as ft
+#import swtUtils.ftan as ft
 
 
 def saveObj(obj, filename):
@@ -409,3 +409,34 @@ def setupFTANDirectory(FMSTDirectory,period,projectCode,component,_overwrite=Fal
                     dst=fmstPath)
 
     return fmstPath
+
+def getAvgVelocity(dataDirectory,period,component):
+    tomoDirectory = getTomoDirectory(dataDirectory,component) + f'/{period}s'
+    avgPhvel = loadObj(tomoDirectory + '/avgPhvel.pkl')
+    return avgPhvel
+
+def editBackgroundVel(fmstPath,avgPhvel):
+    filepath = f'{fmstPath}/mkmodel/grid2dss.in'
+    if not os.path.isfile(filepath):
+        raise ValueError('Could not find grid2dss.in')
+
+    with open(filepath,"r") as infile:
+        lines = infile.readlines()
+        newline =  str(avgPhvel) + lines[14][len(str(avgPhvel)):]
+        lines[14] = newline
+
+    with open(filepath,"w") as outfile:
+        for line in lines:
+            outfile.write(line)
+
+def moveFMSTInputs(fmstPath,tomoDirectory,_overwrite=False):
+    files = ['sources.dat','receivers.dat','otimes.dat']
+    for file in files:
+        filepath = fmstPath + f'/{file}'
+        if os.path.isfile(filepath) is True:
+            if _overwrite is False:
+                continue
+
+            os.remove(filepath)
+
+        shutil.copy(f'{tomoDirectory}/{file}',fmstPath)

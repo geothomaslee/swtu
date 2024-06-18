@@ -19,7 +19,7 @@ import swtUtils.ftan as ftan
 import swtUtils.fmstUtils as fmstUtils
 
 
-def main(foldTraces=True,runFTAN=True,makeFMSTInputs=True,setupFMSTDirectory=True):
+def main(foldTraces=True,runFTAN=True,makeFMSTInputs=True,setupFMSTDirectory=True,runInversion=True):
 
     dataDirectory = '/Volumes/NewHDant/RainierAmbient'
     ftanDirectory = '/Users/thomaslee/FTAN'
@@ -66,7 +66,7 @@ def main(foldTraces=True,runFTAN=True,makeFMSTInputs=True,setupFMSTDirectory=Tru
 
         fmstUtils.makeTomoDirectory(dataDirectory,periods,component)
         for period in periods:
-            print(f'===Working on FMST Outputs for {period}s...')
+            print(f'=====Working on FMST Outputs for {period}s...=====')
             network = 'UW,CC,XU,XD,TA,YH'
             channel='BH*,HH*,EH*'
             bound_box = [46.1,47.3,-122.5,-120.9]
@@ -88,6 +88,11 @@ def main(foldTraces=True,runFTAN=True,makeFMSTInputs=True,setupFMSTDirectory=Tru
             plt.xlabel('Phase Velocity (km/s)')
             plt.show()
 
+            avgPhvel = round(float(np.mean(phvels)),4)
+            tomoDirectory = fmstUtils.getTomoDirectory(dataDirectory,component) + f'/{period}s'
+            fmstUtils.saveObj(avgPhvel,f'{tomoDirectory}/avgPhvel.pkl')
+
+
             print(fmstUtils.loadObj(f'/Volumes/NewHDant/RainierAmbient/Tomography/ZZ/{period}s/interpErrorDict.pkl'))
             print(fmstUtils.loadObj(f'/Volumes/NewHDant/RainierAmbient/Tomography/ZZ/{period}s/issueDict.pkl'))
             print(fmstUtils.loadObj(f'/Volumes/NewHDant/RainierAmbient/Tomography/ZZ/{period}s/fpDict.pkl'))
@@ -95,15 +100,40 @@ def main(foldTraces=True,runFTAN=True,makeFMSTInputs=True,setupFMSTDirectory=Tru
 
     if setupFMSTDirectory is True:
         for period in periods:
-            ftanPath = fmstUtils.setupFTANDirectory(FMSTDirectory=fmstDirectory,
+            tomoDirectory = fmstUtils.getTomoDirectory(dataDirectory,component) + f'/{period}s'
+            fmstPath = fmstUtils.setupFTANDirectory(FMSTDirectory=fmstDirectory,
                                                     period=period,
                                                     projectCode=projectCode,
                                                     component=component,
-                                                    _overwrite=False)
+                                                    _overwrite=True)
 
+            fmstUtils.moveFMSTInputs(fmstPath=fmstPath,
+                                     tomoDirectory=tomoDirectory,
+                                     _overwrite=False)
+
+            avgPhvel = fmstUtils.getAvgVelocity(dataDirectory,period,component)
+            fmstUtils.editBackgroundVel(fmstPath,avgPhvel)
+
+    if runInversion is True:
+        test_periods=[5]
+        for period in test_periods:
+            print(f'=====PERFORMING INVERSION FOR {period}s...======')
+            fmstDir = f'{fmstDirectory}/{projectCode}_{period}s_{component}'
+
+            mkmodelDir = fmstDir + '/mkmodel'
+            subprocess.run('grid2dss',cwd=mkmodelDir,shell=True)
+            shutil.copy(f'{mkmodelDir}/grid2d.vtx',f'{fmstDir}/gridi.vtx')
+
+            subprocess.run('ttomoss',cwd=fmstDir)
+
+            gmtplotDir = fmstDir + '/gmtplot'
+            subprocess.run('tslicess',cwd=gmtplotDir)
+            subprocess.run(['chmod','+x', './plotgmt6'],cwd=gmtplotDir)
+            subprocess.call(f'{gmtplotDir}/plotgmt6',cwd=gmtplotDir)
 
 if __name__ == '__main__':
     main(foldTraces=False,
          runFTAN=False,
          makeFMSTInputs=False,
-         setupFMSTDirectory=True)
+         setupFMSTDirectory=True,
+         runInversion=True)
