@@ -17,13 +17,14 @@ import os
 import pickle
 from glob import glob
 from tqdm import tqdm
+import shutil
 
 import numpy as np
 import obspy
 from obspy.clients.fdsn import Client
 import matplotlib.pyplot as plt
 
-import ftan as ft
+import swtUtils.ftan as ft
 
 
 def saveObj(obj, filename):
@@ -193,6 +194,7 @@ def makeFMSTInputs(stationDict,dataDirectory,FTANDirectory,period,component,minS
     # Create receiver file
     open(receiverFile,'w',encoding='utf-8').close()
     with open(receiverFile, 'a',encoding='utf-8') as file:
+        file.write(f'{int(len(list(stationDict.keys())))}\n')
         for station, coords in stationDict.items():
             file.write(f'{coords[0]} {coords[1]}\n')
         file.close()
@@ -200,6 +202,7 @@ def makeFMSTInputs(stationDict,dataDirectory,FTANDirectory,period,component,minS
     # Create source file
     open(sourcesFile,'w',encoding='utf-8').close()
     with open(sourcesFile, 'a',encoding='utf-8') as file:
+        file.write(f'{int(len(list(stationDict.keys())))}\n')
         for station, coords in stationDict.items():
             file.write(f'{coords[0]} {coords[1]}\n')
         file.close()
@@ -210,6 +213,7 @@ def makeFMSTInputs(stationDict,dataDirectory,FTANDirectory,period,component,minS
 
     phvels = []
     with open(timesFile, 'a',encoding='utf-8') as outfile:
+        #outfile.write(f'{len(stationList)**2}\n')
         for i, stat1 in tqdm(enumerate(stationList),total=len(stationList)):
             for j, stat2 in enumerate(stationList):
                 if stat1 == stat2:
@@ -262,7 +266,7 @@ def makeFMSTInputs(stationDict,dataDirectory,FTANDirectory,period,component,minS
 
                 travelTime = round(float(getTravelTime(phvel,dist)), 4)
                 issue_dict['good'] += 1
-                outfile.write(f'1.0 {travelTime} 1.0\n')
+                outfile.write(f'1 {travelTime} 1.0\n')
 
     if detailedError is True:
         saveObj(issue_dict, f'{periodDirectory}/issueDict.pkl')
@@ -337,6 +341,7 @@ def _interpPeriodErrorHandler(interpPeriodOut,interpPeriodDict):
     return None, interpPeriodDict
 
 def checkIfFTANExists(stat1,stat2,FTANDirectory):
+    """Checks if an FTAN output from AFTAN (Bensen) exists"""
     if os.path.exists(FTANDirectory + f'/{stat1}_{stat2}_Folded.sac_2_DISP.1'):
         return FTANDirectory + f'/{stat1}_{stat2}_Folded.sac_2_DISP.1'
 
@@ -363,6 +368,7 @@ def getWavelength(per,vel):
     return per * vel
 
 def plotIssueDict(issue_dict, label):
+    """Plots one of the issue dicts as a histogram"""
     fig, ax = plt.subplots()
 
     issues = list(issue_dict.keys())
@@ -374,7 +380,31 @@ def plotIssueDict(issue_dict, label):
     plt.title(label)
     plt.show()
 
+def setupFTANDirectory(FMSTDirectory,period,projectCode,component,_overwrite=False):
+    dirName = f'{projectCode}_{period}s_{component}'
+    ftanPath = FMSTDirectory + f'/{dirName}'
+    ftanMasterPath = FMSTDirectory + f'/{projectCode}_Master'
 
+    if not isinstance(projectCode,str):
+        raise TypeError('Project code must be str. See doc')
+
+    if not isinstance(component, str):
+        raise TypeError('Component must be str. See doc')
+    if len(component) != 2:
+        raise ValueError('Component must be two char str. Ex. "ZZ","EE"')
+
+    if not os.path.isdir(ftanPath):
+        os.mkdir(ftanPath)
+    else:
+        if _overwrite is True:
+            shutil.rmtree(ftanPath)
+            os.mkdir(ftanPath)
+
+    if not os.path.isdir(ftanMasterPath):
+        raise ValueError('Could not find master path for project')
+
+
+"""
 network = 'UW,CC,XU,XD,TA,YH'
 stations = 'ALL'
 channel='BH*,HH*,EH*'
@@ -385,19 +415,23 @@ stationList = getLocalStations(dataDirectory,'ZZ')
 stationDict = getValidStations(network,bound_box,channel,stationList)
 
 
+period=8
+
 phvels = makeFMSTInputs(stationDict=stationDict,
                         dataDirectory=dataDirectory,
                         FTANDirectory='/Users/thomaslee/FTAN/Folded',
-                        period=5,
+                        period=period,
                         component='ZZ',
-                        minSNR=5,
+                        minSNR=3,
                         minWavelengths=1.5,
                         detailedError=True)
 
 plt.hist(phvels,bins=np.arange(1.5,5,0.2))
-plt.title('5s Rayleigh Wave Phase Velocities')
+plt.title(f'{period}s Rayleigh Wave Phase Velocities')
 plt.xlabel('Phase Velocity (km/s)')
 
-print(loadObj(f'/Volumes/NewHDant/RainierAmbient/Tomography/ZZ/5s/interpErrorDict.pkl'))
-print(loadObj(f'/Volumes/NewHDant/RainierAmbient/Tomography/ZZ/5s/issueDict.pkl'))
-print(loadObj(f'/Volumes/NewHDant/RainierAmbient/Tomography/ZZ/5s/fpDict.pkl'))
+
+print(loadObj(f'/Volumes/NewHDant/RainierAmbient/Tomography/ZZ/{period}s/interpErrorDict.pkl'))
+print(loadObj(f'/Volumes/NewHDant/RainierAmbient/Tomography/ZZ/{period}s/issueDict.pkl'))
+print(loadObj(f'/Volumes/NewHDant/RainierAmbient/Tomography/ZZ/{period}s/fpDict.pkl'))
+"""

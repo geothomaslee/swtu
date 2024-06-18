@@ -122,33 +122,3 @@ def getRelevantInfo(df):
 def getPeriodRange(df):
     vals = df['obper'].to_list()
     return min(vals),max(vals)
-
-"""
-files = findDispFiles('/Users/thomaslee/FTAN/Folded')
-
-minpers = []
-maxpers = []
-for file in tqdm(files):
-    minper,maxper = getPeriodRange(dispOutputToDF(file))
-    minpers.append(minper)
-    maxpers.append(maxper)
-
-plt.hist(minpers,bins=np.arange(0,10,0.5))
-plt.title('Minimum Period')
-plt.xlim(0,10)
-plt.show()
-
-plt.hist(maxpers,bins=np.arange(0,25,0.5))
-plt.title('Maximum Period')
-plt.xlim(0,25)
-plt.show()
-
-
-
-#dataDirectory = '/Volumes/NewHDant/RainierAmbient'
-#foldAllTraces(dataDirectory,'ZZ')
-
-"""
-
-
-
