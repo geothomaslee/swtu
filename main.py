@@ -19,12 +19,14 @@ import swtUtils.ftan as ftan
 import swtUtils.fmstUtils as fmstUtils
 
 
-def main(foldTraces=True,runFTAN=True,makeFMSTInputs=True):
+def main(foldTraces=True,runFTAN=True,makeFMSTInputs=True,setupFMSTDirectory=True):
 
     dataDirectory = '/Volumes/NewHDant/RainierAmbient'
     ftanDirectory = '/Users/thomaslee/FTAN'
+    fmstDirectory = '/Users/thomaslee/fmst_v1.1'
     component='ZZ'
     projectCode='Rainier'
+    periods = list(np.arange(1,20,1))
 
     if foldTraces is True:
         # First step is to fold all of the two-sided traces
@@ -61,7 +63,6 @@ def main(foldTraces=True,runFTAN=True,makeFMSTInputs=True):
 
     if makeFMSTInputs is True:
         # The next step is to define the periods we want to make phase vel maps for
-        periods = list(np.arange(1,20,1))
 
         fmstUtils.makeTomoDirectory(dataDirectory,periods,component)
         for period in periods:
@@ -92,7 +93,17 @@ def main(foldTraces=True,runFTAN=True,makeFMSTInputs=True):
             print(fmstUtils.loadObj(f'/Volumes/NewHDant/RainierAmbient/Tomography/ZZ/{period}s/fpDict.pkl'))
             print(' ')
 
+    if setupFMSTDirectory is True:
+        for period in periods:
+            ftanPath = fmstUtils.setupFTANDirectory(FMSTDirectory=fmstDirectory,
+                                                    period=period,
+                                                    projectCode=projectCode,
+                                                    component=component,
+                                                    _overwrite=False)
+
+
 if __name__ == '__main__':
     main(foldTraces=False,
          runFTAN=False,
-         makeFMSTInputs=True)
+         makeFMSTInputs=False,
+         setupFMSTDirectory=True)

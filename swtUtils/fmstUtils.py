@@ -382,8 +382,11 @@ def plotIssueDict(issue_dict, label):
 
 def setupFTANDirectory(FMSTDirectory,period,projectCode,component,_overwrite=False):
     dirName = f'{projectCode}_{period}s_{component}'
-    ftanPath = FMSTDirectory + f'/{dirName}'
-    ftanMasterPath = FMSTDirectory + f'/{projectCode}_Master'
+    fmstPath = FMSTDirectory + f'/{dirName}'
+    fmstMasterPath = FMSTDirectory + f'/{projectCode}_Master'
+
+    if not os.path.isdir(FMSTDirectory):
+        raise ValueError('Could not find ftan directory')
 
     if not isinstance(projectCode,str):
         raise TypeError('Project code must be str. See doc')
@@ -393,45 +396,16 @@ def setupFTANDirectory(FMSTDirectory,period,projectCode,component,_overwrite=Fal
     if len(component) != 2:
         raise ValueError('Component must be two char str. Ex. "ZZ","EE"')
 
-    if not os.path.isdir(ftanPath):
-        os.mkdir(ftanPath)
-    else:
-        if _overwrite is True:
-            shutil.rmtree(ftanPath)
-            os.mkdir(ftanPath)
+    if os.path.isdir(fmstPath) is True and _overwrite is True:
+        shutil.rmtree(fmstPath)
+    elif os.path.isdir(fmstPath) is True and _overwrite is False:
+        print(f'FMST path for {projectCode} {component} {period}s already exists')
+        return fmstPath
 
-    if not os.path.isdir(ftanMasterPath):
+    if not os.path.isdir(fmstMasterPath):
         raise ValueError('Could not find master path for project')
 
+    shutil.copytree(src=fmstMasterPath,
+                    dst=fmstPath)
 
-"""
-network = 'UW,CC,XU,XD,TA,YH'
-stations = 'ALL'
-channel='BH*,HH*,EH*'
-bound_box = [46.1,47.3,-122.5,-120.9]
-dataDirectory = '/Volumes/NewHDant/RainierAmbient'
-
-stationList = getLocalStations(dataDirectory,'ZZ')
-stationDict = getValidStations(network,bound_box,channel,stationList)
-
-
-period=8
-
-phvels = makeFMSTInputs(stationDict=stationDict,
-                        dataDirectory=dataDirectory,
-                        FTANDirectory='/Users/thomaslee/FTAN/Folded',
-                        period=period,
-                        component='ZZ',
-                        minSNR=3,
-                        minWavelengths=1.5,
-                        detailedError=True)
-
-plt.hist(phvels,bins=np.arange(1.5,5,0.2))
-plt.title(f'{period}s Rayleigh Wave Phase Velocities')
-plt.xlabel('Phase Velocity (km/s)')
-
-
-print(loadObj(f'/Volumes/NewHDant/RainierAmbient/Tomography/ZZ/{period}s/interpErrorDict.pkl'))
-print(loadObj(f'/Volumes/NewHDant/RainierAmbient/Tomography/ZZ/{period}s/issueDict.pkl'))
-print(loadObj(f'/Volumes/NewHDant/RainierAmbient/Tomography/ZZ/{period}s/fpDict.pkl'))
-"""
+    return fmstPath
