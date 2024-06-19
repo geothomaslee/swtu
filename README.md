@@ -12,7 +12,7 @@ Rawlinson, N. and Sambridge M., 2005. "The fast marching method: An effective to
 ### Setup
 First, you'll need to install both FMST and FTAN from their respective original authors. You will also need to compile them, and instructions for doing this can be found from the original authors as well.
 It is assumed that these will both be installed in their own directories and compiled there. I installed them in my own home directory. The primary directory for each program will be called its home directory for the rest of the documentation.
--`/Users/{your_username}/FTAN` - example FTAN home directory
+- `/Users/{your_username}/FTAN` - example FTAN home directory
 - `Users/{your_username}/fmst_v1.1` - example FMST home directory
 
 <details>
