@@ -15,7 +15,8 @@ It is assumed that these will both be installed in their own directories and com
 `/Users/{your_username}/FTAN` - example FTAN home directory
 `Users/{your_username}/fmst_v1.1` - example FMST home directory
 
-A Note on Compiling:
+<summary>A Note on Compiling: </summary>
+<details>
 - FMST is done entirely with fortran, and the compileall script it comes with defaults to the ifort compiler which works fine if you have it, but I would assume in this day and age most of us already have and use gfortran.
 - The makefile in FTAN/bin defaults to using gfortran for its compiler so that likely does not need to be changed
 - FTAN has some of its scripts done in C, and therefore a C compiler is needed, which defaults to gcc, which you should have if you have gfortran already
@@ -27,3 +28,4 @@ A Note on Compiling:
   - To get around this, you have to set the compiler to the specific gcc version you have. For me, that is gcc-13.
   - MACs also do not have /usr/local/lib on the Path, and therefore the -l flag for loading libraries won't be able to find fftw3, a required input library
     - You can either add it to the path via ~/.bash_profile OR you can use the -L flag in the makefile in FTAN/bin to tell it to load libraries from that directory
+</details>
