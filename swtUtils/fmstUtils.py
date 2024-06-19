@@ -440,3 +440,15 @@ def moveFMSTInputs(fmstPath,tomoDirectory,_overwrite=False):
             os.remove(filepath)
 
         shutil.copy(f'{tomoDirectory}/{file}',fmstPath)
+
+def findAllFinalTomoImages(fmstPath,projectCode,component,periods):
+    imgdir = fmstPath + '/phvelMaps'
+    if not os.path.isdir(imgdir):
+        os.mkdir(imgdir)
+
+    for period in periods:
+        filename = f'{projectCode}_{period}s_{component}/gmtplot/tmp.png'
+        fullpath = f'{fmstPath}/{filename}'
+        shutil.copyfile(src=fullpath,
+                        dst=f'{imgdir}/phvel_{period}s.png')
+

@@ -11,6 +11,7 @@ Department of Earth and Planetary Science
 import subprocess
 import shutil
 import os
+import time
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -19,7 +20,8 @@ import swtUtils.ftan as ftan
 import swtUtils.fmstUtils as fmstUtils
 
 
-def main(foldTraces=True,runFTAN=True,makeFMSTInputs=True,setupFMSTDirectory=True,runInversion=True):
+def main(foldTraces=True,runFTAN=True,makeFMSTInputs=True,
+         setupFMSTDirectory=True,runInversion=True,runOnlyGMT=False):
 
     dataDirectory = '/Volumes/NewHDant/RainierAmbient'
     ftanDirectory = '/Users/thomaslee/FTAN'
@@ -115,25 +117,37 @@ def main(foldTraces=True,runFTAN=True,makeFMSTInputs=True,setupFMSTDirectory=Tru
             fmstUtils.editBackgroundVel(fmstPath,avgPhvel)
 
     if runInversion is True:
-        test_periods=[5]
-        for period in test_periods:
-            print(f'=====PERFORMING INVERSION FOR {period}s...======')
+        for i,period in enumerate(periods):
             fmstDir = f'{fmstDirectory}/{projectCode}_{period}s_{component}'
+            if runOnlyGMT is False:
+                print(f'=====PERFORMING INVERSION FOR {period}s...======')
+                mkmodelDir = fmstDir + '/mkmodel'
+                subprocess.run('grid2dss',cwd=mkmodelDir,shell=True)
+                shutil.copy(f'{mkmodelDir}/grid2d.vtx',f'{fmstDir}/gridi.vtx')
 
-            mkmodelDir = fmstDir + '/mkmodel'
-            subprocess.run('grid2dss',cwd=mkmodelDir,shell=True)
-            shutil.copy(f'{mkmodelDir}/grid2d.vtx',f'{fmstDir}/gridi.vtx')
+                subprocess.run('ttomoss',cwd=fmstDir)
 
-            subprocess.run('ttomoss',cwd=fmstDir)
+            if runOnlyGMT is True:
+                if i == 0:
+                    print('=====REBUILDING PHASE VELOCITY MAPS WITH MASTER GMT TEMPLATE======')
+                print(f'Making map {period}s...')
+                shutil.copy(src=f'{fmstDirectory}/{projectCode}_Master/gmtplot/plotgmt6',
+                            dst=f'{fmstDir}/gmtplot')
 
             gmtplotDir = fmstDir + '/gmtplot'
             subprocess.run('tslicess',cwd=gmtplotDir)
             subprocess.run(['chmod','+x', './plotgmt6'],cwd=gmtplotDir)
             subprocess.call(f'{gmtplotDir}/plotgmt6',cwd=gmtplotDir)
 
+    fmstUtils.findAllFinalTomoImages(fmstPath=fmstDirectory,
+                                     projectCode=projectCode,
+                                     component=component,
+                                     periods=periods)
+
 if __name__ == '__main__':
     main(foldTraces=False,
          runFTAN=False,
          makeFMSTInputs=False,
-         setupFMSTDirectory=True,
-         runInversion=True)
+         setupFMSTDirectory=False,
+         runInversion=True,
+         runOnlyGMT=True)
