@@ -15,7 +15,7 @@ Citations:
         effective tool for tomographic imaging and tracking multiple phases in
         complex layered media", Explor. Geophys., 36, 341-350.
 """
-
+#pylint: disable=invalid-name
 import subprocess
 import shutil
 import os
@@ -24,12 +24,35 @@ import time
 import matplotlib.pyplot as plt
 import numpy as np
 
-import swtUtils.ftan as ftan
-import swtUtils.fmstUtils as fmstUtils
+#pylint: disable=import-error
+from swtUtils import ftan, fmstUtils
 
 
 def main(foldTraces=True,runFTAN=True,makeFMSTInputs=True,
          setupFMSTDirectory=True,runInversion=True,runOnlyGMT=False):
+    """
+    The main function of swtu. You should read each of the 6 input parameters
+    as their own individual steps, and documentation is included progressively
+    throughout the code and in the README.md on the GitHub page for this repo.
+
+    Parameters
+    ----------
+    foldTraces : bool, optional
+        Folds the cross-correlations. The default is True.
+    runFTAN : bool, optional
+        Performs FTAN on the folded traces. The default is True.
+    makeFMSTInputs : bool, optional
+        Takes the FTAN outputs and makes properly formatted inputs for FMST, on
+        a per period basis. The default is True.
+    setupFMSTDirectory : bool, optional
+        Creates a properly formatted FMST directory for each period.
+        The default is True.
+    runInversion : bool, optional
+        Runs FMST. The default is True.
+    runOnlyGMT : bool, optional
+        Will run plotgmt6 without re-running the inversion. The default is False.
+
+    """
 
     dataDirectory = '/Volumes/NewHDant/RainierAmbient'
     ftanDirectory = '/Users/thomaslee/FTAN'
@@ -65,10 +88,7 @@ def main(foldTraces=True,runFTAN=True,makeFMSTInputs=True,
         print('Output from the terminal is not displayed until the end')
         print('Usually takes 2ish minutes to run, but your mileage may vary...')
 
-        output, error = subprocess.call(f'{ftanDirectory}/runFTAN.csh',cwd=ftanDirectory)
-        print(output.decode())
-        print(error.decode())
-
+        subprocess.call(f'{ftanDirectory}/runFTAN.csh',cwd=ftanDirectory)
         print(' ')
 
     if makeFMSTInputs is True:
@@ -131,10 +151,10 @@ def main(foldTraces=True,runFTAN=True,makeFMSTInputs=True,
                 print(f'=====PERFORMING INVERSION FOR {period}s...======')
                 inversion_start = time.perf_counter()
                 mkmodelDir = fmstDir + '/mkmodel'
-                subprocess.run('grid2dss',cwd=mkmodelDir,shell=True)
+                subprocess.run('grid2dss',cwd=mkmodelDir,shell=True,check=False)
                 shutil.copy(f'{mkmodelDir}/grid2d.vtx',f'{fmstDir}/gridi.vtx')
 
-                subprocess.run('ttomoss',cwd=fmstDir)
+                subprocess.run('ttomoss',cwd=fmstDir,check=False)
 
                 print(f'Inversion took {time.perf_counter() - inversion_start} seconds')
 
@@ -146,8 +166,8 @@ def main(foldTraces=True,runFTAN=True,makeFMSTInputs=True,
                             dst=f'{fmstDir}/gmtplot')
 
             gmtplotDir = fmstDir + '/gmtplot'
-            subprocess.run('tslicess',cwd=gmtplotDir)
-            subprocess.run(['chmod','+x', './plotgmt6'],cwd=gmtplotDir)
+            subprocess.run('tslicess',cwd=gmtplotDir,check=False)
+            subprocess.run(['chmod','+x', './plotgmt6'],cwd=gmtplotDir,check=False)
             subprocess.call(f'{gmtplotDir}/plotgmt6',cwd=gmtplotDir)
 
     fmstUtils.findAllFinalTomoImages(fmstPath=fmstDirectory,
