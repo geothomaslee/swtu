@@ -130,7 +130,7 @@ def main(foldTraces=True,runFTAN=True,makeFMSTInputs=True,
             if runOnlyGMT is True:
                 if i == 0:
                     print('=====REBUILDING PHASE VELOCITY MAPS WITH MASTER GMT TEMPLATE======')
-                print(f'Making map {period}s...')
+                print(f'Making map for {period}s...')
                 shutil.copy(src=f'{fmstDirectory}/{projectCode}_Master/gmtplot/plotgmt6',
                             dst=f'{fmstDir}/gmtplot')
 

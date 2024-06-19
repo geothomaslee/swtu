@@ -24,7 +24,7 @@ import obspy
 from obspy.clients.fdsn import Client
 import matplotlib.pyplot as plt
 
-#import swtUtils.ftan as ft
+import swtUtils.ftan as ft
 
 
 def saveObj(obj, filename):
@@ -53,6 +53,7 @@ def getComponentDirectory(dataDirectory, component):
     return stackDirectory + f'/{component}'
 
 def getTomoDirectory(dataDirectory,component):
+    """Returns the tomography directory for the component of interest"""
     if not isinstance(component, str):
         raise TypeError('Component must be 2 character string. Ex. "ZZ"')
     if len(component) != 2:
@@ -86,6 +87,28 @@ def getLocalStations(dataDirectory,component):
     return station_list
 
 def getValidStations(network,bounds,channel,stationList):
+    """
+    Cross-references our list of stations that we have data for in the
+    cross-correlation folder with a search of stations in the IRIS database,
+    and builds a nice dictionary out of it that is used by makeFMSTInputs.
+
+    Parameters
+    ----------
+    network : str
+        Network(s).
+    bounds : list of ints
+        [minlat,maxlat,minlon,maxlon]. Study area
+    channel : str
+        Channels of interest.
+    stationList : list of str
+        List of all station names that have been found within the stack directory.
+
+    Returns
+    -------
+    stationDict : dict
+        {network.station : (lat,lon).
+
+    """
     client = Client("IRIS")
     inventory = client.get_stations(network = network,
                                     station = '*',
@@ -111,6 +134,7 @@ def getValidStations(network,bounds,channel,stationList):
     return stationDict
 
 def getInventoryLength(inventory):
+    """Returns the number of stations in your inventory"""
     length = 0
     for network in inventory:
         length += len(network)
@@ -176,6 +200,91 @@ def makeInterpErrorDict():
     return interpErrorDict
 
 def makeFMSTInputs(stationDict,dataDirectory,FTANDirectory,period,component,minSNR,minWavelengths,detailedError=True):
+    """
+    =====OUTPUT FILE INFO======
+    Will makes the 3 input files needed by FMST - sources.dat,receivers.dat,
+    and otimes.dat.
+
+    sources.dat - list of all sources
+    recivers.dat - list of all receivers
+    otimes.dat - list of travel times between combinations
+
+    otimes.dat is expected to be the travel time between every source-receiver
+    combination, even if no travel time exists. A 0 is written into the first column
+    in that case because FMST still expects a line for every single S-R pair.
+
+    receivers.dat and sources.dat are identical for ambient noise tomography.
+
+    This script will iterate through every possible station-station pair, and will
+    give a 0 to otimes in the following cases:
+
+    1. If the station-station pair is an autocorrelation
+    2. If no corresponding output from FTAN can be found
+    3. If the original SAC file cannot be found to pull a distance from.
+    4. If the interpolator returns None.
+    5. If the measured phase velocity is below 1.5 km/s or greater than 5 km/s.
+    6. If the signal-to-noise ratio is less than minSNR, a function parameter.
+    7. If the interstation distance is less than minWavelengths
+        - The wavelength is calculated using the phase velocity and period
+
+    ======CALCULATING PHASE VELOCITIES=======
+    This is assumed to have already been done by the original AFTAN fortran
+    script from Bensen et. al,. I have written this script to assume the file
+    structure that is inherited from a script called runFTAN.csh, originally by
+    Justin Wilgus as a PhD student in Brandon Schmandt's lab. Chances are if
+    you're reading this, you're inheriting this code and therefore will also
+    have that script.
+
+    AFTAN automatically adjust the periods it tests based on the SNR, so the outputs
+    must be interpolated if you want an exact integer period. This also has to
+    interpolate the SNR. See the interpolator itself to see how it works, but it
+    does just a linear interpolation based on the nearest points that bound
+    the integer period of interest.
+
+    You may encounter a situation where AFTAN actually backtracks at short periods especially,
+    and therefore a linear interpolation will break. I haven't had this issue but
+    this has been reported to me by others.
+
+    ========ERROR DICTIONARIES============
+    With cross-correlation functions its expected that most of your data won't
+    pass quality control, but within reason. It's good to know why you're getting
+    a 0 value in otimes instead of just moving on. This script creates 3 different
+    error dictionaries based on the returned error codes of certain functions. The error
+    codes themselves are just integers from the script that spits them out, but
+    these functions are themselves wrapped in an error handler that can properly add
+    to the dictionary. These are saved inside of the tomography directory as .pkl
+    files which need to be read by the pickle module. I have this done already
+    inside of swtu.main and it prints them when running main.
+
+    Parameters
+    ----------
+    stationDict : dict
+        Dict in the format from getValidStations.
+    dataDirectory : str
+        Full filepath to the directory where your stacked cross-correlations
+        are kept, with a file structure inherited from
+        github/thomaslee/ambient2-tlee-fork.
+    FTANDirectory : str
+        Full filepath to the directory where FTAN is located. This should be
+        the directory that CONTAINS runFTAN.csh
+    period : int
+        Period of interest.
+    component : str
+        Component.
+    minSNR : int or float
+        Minimum signal to noise ratio for phase velocity measurements.
+    minWavelengths : int or float
+        Minimum number of wavelengths, below which the interstation distance
+        is considered too short.
+    detailedError : bool, optional
+        If true, will pickle the error dictionaries. The default is True.
+
+    Returns
+    -------
+    phvels : list
+        List of every measured phase velocity, generally used for plotting
+        a histogram to see if your measurements are generally correct.
+    """
     # Get directories
     tomoDirectory = getTomoDirectory(dataDirectory,component)
     periodDirectory = tomoDirectory + f'/{period}s'
@@ -351,6 +460,7 @@ def checkIfFTANExists(stat1,stat2,FTANDirectory):
     return None
 
 def getDist(stat1,stat2,componentDirectory):
+    """Given two stats, finds dist from original SAC file"""
     if os.path.exists(componentDirectory + f'/{stat1}_{stat2}.sac'):
         return obspy.read(componentDirectory + f'/{stat1}_{stat2}.sac')[0].stats.sac['dist']
 
@@ -381,6 +491,43 @@ def plotIssueDict(issue_dict, label):
     plt.show()
 
 def setupFTANDirectory(FMSTDirectory,period,projectCode,component,_overwrite=False):
+    """
+    Creates a new FMST run directory inside the base FMST directory.
+
+    FMST requires a list of inputs that are called by several different scripts,
+    but all of them can be called sequentially using ttomoss. The travel time
+    file will be unique to that period, so every period we want to perform an
+    inversion for needs its own directory.
+
+    This uses a master template file called {projectCode}_Master inside the FMST
+    directory. It contains all the input files that should be standard across
+    all runs. Those files are copied into the new directory, which will be called
+    {project_code}_{period}s_{component}.
+
+    Example, project Rainier will look for its template in Rainier_Master, then
+    copy its contents into Rainier_5s_ZZ if we give this function a period of 5
+    and a component of ZZ.
+
+    Parameters
+    ----------
+    FMSTDirectory : str
+        Full path to the FMST directory..
+    period : int
+        Period of interest.
+    projectCode : str
+        Name of project. See full docstring for details.
+    component : str
+        Component. Ex. "ZZ","NE".
+    _overwrite : bool, optional
+        If set True, will overwrite the existing directory if it already exists
+        This is useful if you're playing around with the inversion parameters and
+        want a clean slate. The default is False.
+
+    Returns
+    -------
+    fmstPath : str
+        Path to the newly created FMST run directory.
+    """
     dirName = f'{projectCode}_{period}s_{component}'
     fmstPath = FMSTDirectory + f'/{dirName}'
     fmstMasterPath = FMSTDirectory + f'/{projectCode}_Master'
@@ -411,11 +558,28 @@ def setupFTANDirectory(FMSTDirectory,period,projectCode,component,_overwrite=Fal
     return fmstPath
 
 def getAvgVelocity(dataDirectory,period,component):
+    """Reads the previously pickled average velocity for that period"""
     tomoDirectory = getTomoDirectory(dataDirectory,component) + f'/{period}s'
     avgPhvel = loadObj(tomoDirectory + '/avgPhvel.pkl')
     return avgPhvel
 
 def editBackgroundVel(fmstPath,avgPhvel):
+    """
+    Edits the background velocity in grid2dss.in, the initial grid creation
+    input file for FMST, to match the average measured phase velocity from FTAN.
+
+    Parameters
+    ----------
+    fmstPath : str
+        Full path to the FMST base directory.
+    avgPhvel : float or int
+        Average phase velocity.
+
+    Returns
+    -------
+    None.
+
+    """
     filepath = f'{fmstPath}/mkmodel/grid2dss.in'
     if not os.path.isfile(filepath):
         raise ValueError('Could not find grid2dss.in')
@@ -430,6 +594,7 @@ def editBackgroundVel(fmstPath,avgPhvel):
             outfile.write(line)
 
 def moveFMSTInputs(fmstPath,tomoDirectory,_overwrite=False):
+    """Moves FMST inputs to their corresponding FMST directory"""
     files = ['sources.dat','receivers.dat','otimes.dat']
     for file in files:
         filepath = fmstPath + f'/{file}'
@@ -442,6 +607,7 @@ def moveFMSTInputs(fmstPath,tomoDirectory,_overwrite=False):
         shutil.copy(f'{tomoDirectory}/{file}',fmstPath)
 
 def findAllFinalTomoImages(fmstPath,projectCode,component,periods):
+    """Finds all final tomo images and puts them inside the primary FMST dir"""
     imgdir = fmstPath + '/phvelMaps'
     if not os.path.isdir(imgdir):
         os.mkdir(imgdir)
