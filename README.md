@@ -15,8 +15,8 @@ It is assumed that these will both be installed in their own directories and com
 `/Users/{your_username}/FTAN` - example FTAN home directory
 `Users/{your_username}/fmst_v1.1` - example FMST home directory
 
-<summary>A Note on Compiling: </summary>
 <details>
+<summary>A Note on Compiling (READ ESPECIALLY IF ON MAC): </summary>
 - FMST is done entirely with fortran, and the compileall script it comes with defaults to the ifort compiler which works fine if you have it, but I would assume in this day and age most of us already have and use gfortran.
 - The makefile in FTAN/bin defaults to using gfortran for its compiler so that likely does not need to be changed
 - FTAN has some of its scripts done in C, and therefore a C compiler is needed, which defaults to gcc, which you should have if you have gfortran already
