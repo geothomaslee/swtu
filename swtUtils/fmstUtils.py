@@ -8,24 +8,32 @@ University of New Mexico
 Department of Earth and Planetary Science
 
 A module for creating properly formatted inputs for Fast-Marching Surface
-Tomography (FMST) by Nick Rawlinson using outputs from pyaftan by Lili Feng.
+Tomography (FMST) by Nick Rawlinson using outputs from AFTAN by Bensen et. al.
 Assumes the stacked cross-correlation functions are in the format and file
 structure outputted by ambient2.
+
+Citations:
+    [1] Bensen, G. D., et al. (2007). Processing seismic ambient noise data to
+    obtain reliable broad-band surface wave dispersion measurements.
+        Geophysical Journal International, 169(3), 1239-1260.
+    [2] Rawlinson, N. and Sambridge M., 2005. "The fast marching method: An
+        effective tool for tomographic imaging and tracking multiple phases in
+        complex layered media", Explor. Geophys., 36, 341-350.
 """
 
 import os
 import pickle
-from glob import glob
-from tqdm import tqdm
 import shutil
+from glob import glob
 
+from tqdm import tqdm
 import numpy as np
 import obspy
 from obspy.clients.fdsn import Client
 import matplotlib.pyplot as plt
 
-import swtUtils.ftan as ft
-
+import swtUtils.ftan as ft #pylint: disable=import-error
+#pylint: disable=invalid-name
 
 def saveObj(obj, filename):
     """Quick function for pickling a file"""
@@ -120,16 +128,16 @@ def getValidStations(network,bounds,channel,stationList):
 
     inventoryCopy = inventory.copy()
 
-    for network in inventory:
-        for station in network:
-            formattedName = f'{network.code}.{station.code}'
+    for net in inventory:
+        for station in net:
+            formattedName = f'{net.code}.{station.code}'
             if formattedName not in stationList:
-                inventoryCopy = inventoryCopy.remove(network=network.code,station=station.code)
+                inventoryCopy = inventoryCopy.remove(network=net.code,station=station.code)
 
     stationDict = {}
-    for network in inventoryCopy:
+    for net in inventoryCopy:
         for station in network:
-            stationDict[f'{network.code}.{station.code}'] = (station.latitude,station.longitude)
+            stationDict[f'{net.code}.{station.code}'] = (station.latitude,station.longitude)
 
     return stationDict
 
@@ -139,7 +147,7 @@ def getInventoryLength(inventory):
     for network in inventory:
         length += len(network)
 
-    return(length)
+    return length
 
 def makeTomoDirectory(dataDirectory,periods,component):
     """Periods must be a list of all periods, or if only 2 elements, is assumed
@@ -304,7 +312,7 @@ def makeFMSTInputs(stationDict,dataDirectory,FTANDirectory,period,component,minS
     open(receiverFile,'w',encoding='utf-8').close()
     with open(receiverFile, 'a',encoding='utf-8') as file:
         file.write(f'{int(len(list(stationDict.keys())))}\n')
-        for station, coords in stationDict.items():
+        for coords in stationDict.values():
             file.write(f'{coords[0]} {coords[1]}\n')
         file.close()
 
@@ -312,7 +320,7 @@ def makeFMSTInputs(stationDict,dataDirectory,FTANDirectory,period,component,minS
     open(sourcesFile,'w',encoding='utf-8').close()
     with open(sourcesFile, 'a',encoding='utf-8') as file:
         file.write(f'{int(len(list(stationDict.keys())))}\n')
-        for station, coords in stationDict.items():
+        for coords in stationDict.values():
             file.write(f'{coords[0]} {coords[1]}\n')
         file.close()
 
@@ -323,8 +331,8 @@ def makeFMSTInputs(stationDict,dataDirectory,FTANDirectory,period,component,minS
     phvels = []
     with open(timesFile, 'a',encoding='utf-8') as outfile:
         #outfile.write(f'{len(stationList)**2}\n')
-        for i, stat1 in tqdm(enumerate(stationList),total=len(stationList)):
-            for j, stat2 in enumerate(stationList):
+        for stat1 in tqdm(stationList):
+            for stat2 in stationList:
                 if stat1 == stat2:
                     issue_dict['autocorrelation'] += 1
                     outfile.write('0 0.0000 1.0\n')
@@ -479,7 +487,7 @@ def getWavelength(per,vel):
 
 def plotIssueDict(issue_dict, label):
     """Plots one of the issue dicts as a histogram"""
-    fig, ax = plt.subplots()
+    fig, ax = plt.subplots() #pylint: disable=unused-variable
 
     issues = list(issue_dict.keys())
     count = list(issue_dict.values())
@@ -584,12 +592,12 @@ def editBackgroundVel(fmstPath,avgPhvel):
     if not os.path.isfile(filepath):
         raise ValueError('Could not find grid2dss.in')
 
-    with open(filepath,"r") as infile:
+    with open(filepath,"r",encoding='utf-8') as infile:
         lines = infile.readlines()
         newline =  str(avgPhvel) + lines[14][len(str(avgPhvel)):]
         lines[14] = newline
 
-    with open(filepath,"w") as outfile:
+    with open(filepath,"w",encoding='utf-8') as outfile:
         for line in lines:
             outfile.write(line)
 
@@ -617,4 +625,3 @@ def findAllFinalTomoImages(fmstPath,projectCode,component,periods):
         fullpath = f'{fmstPath}/{filename}'
         shutil.copyfile(src=fullpath,
                         dst=f'{imgdir}/phvel_{period}s.png')
-

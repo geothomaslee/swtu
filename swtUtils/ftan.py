@@ -15,6 +15,7 @@ Citations:
     obtain reliable broad-band surface wave dispersion measurements.
         Geophysical Journal International, 169(3), 1239-1260.
 """
+#pylint: disable=invalid-name
 
 import os
 from glob import glob
@@ -24,9 +25,6 @@ import obspy
 from obspy import Trace
 from tqdm import tqdm
 import pandas as pd
-import matplotlib.pyplot as plt
-import numpy as np
-
 
 def getStackDirectory(dataDirectory):
     """Returns the stack directory given the data directoy"""
@@ -49,6 +47,7 @@ def getSACFileList(componentDirectory):
     return fileList
 
 def getFoldDirectory(dataDirectory, component):
+    """Returns the directory containing folded traces"""
     componentDirectory = getComponentDirectory(dataDirectory,component)
     foldDirectory = componentDirectory + '/Folded'
 
@@ -68,7 +67,6 @@ def getSACDict(tr):
     del sacDict['depmax']
 
     return sacDict
-
 
 def foldTrace(tr):
     """Returns a folded version of the trace"""
@@ -103,22 +101,25 @@ def foldAllTraces(dataDirectory,component):
         savePath = foldDirectory + f'/{basename}_Folded.sac'
         folded_tr.write(savePath)
 
-
 def dispOutputToDF(file):
+    """Turns disp file into df"""
     columns=['nf','cper','obper','gvel','phvel','ampl','snr']
     df = pd.read_csv(file,delim_whitespace=True,names=columns)
     return df
 
 def findDispFiles(dispDirectory):
+    """Finds all final FTAN output files"""
     fileList = glob(dispDirectory + '/*2_DISP.1*')
     return fileList
 
 def getRelevantInfo(df):
+    """Returns observed period, phase velocity, and snr info"""
     obper = df['obper'].to_list()
     phvel = df['phvel'].to_list()
     snr = df['snr'].to_list()
     return obper,phvel,snr
 
 def getPeriodRange(df):
+    """Returns the range of periods measured by FTAN"""
     vals = df['obper'].to_list()
     return min(vals),max(vals)

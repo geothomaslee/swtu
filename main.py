@@ -6,6 +6,14 @@ Created on Tue Jun 18 08:15:34 2024
 @author: Thomas Lee
 University of New Mexico
 Department of Earth and Planetary Science
+
+Citations:
+    [1] Bensen, G. D., et al. (2007). Processing seismic ambient noise data to
+    obtain reliable broad-band surface wave dispersion measurements.
+        Geophysical Journal International, 169(3), 1239-1260.
+    [2] Rawlinson, N. and Sambridge M., 2005. "The fast marching method: An
+        effective tool for tomographic imaging and tracking multiple phases in
+        complex layered media", Explor. Geophys., 36, 341-350.
 """
 
 import subprocess
@@ -121,11 +129,14 @@ def main(foldTraces=True,runFTAN=True,makeFMSTInputs=True,
             fmstDir = f'{fmstDirectory}/{projectCode}_{period}s_{component}'
             if runOnlyGMT is False:
                 print(f'=====PERFORMING INVERSION FOR {period}s...======')
+                inversion_start = time.perf_counter()
                 mkmodelDir = fmstDir + '/mkmodel'
                 subprocess.run('grid2dss',cwd=mkmodelDir,shell=True)
                 shutil.copy(f'{mkmodelDir}/grid2d.vtx',f'{fmstDir}/gridi.vtx')
 
                 subprocess.run('ttomoss',cwd=fmstDir)
+
+                print(f'Inversion took {time.perf_counter() - inversion_start} seconds')
 
             if runOnlyGMT is True:
                 if i == 0:
