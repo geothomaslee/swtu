@@ -99,10 +99,11 @@ def main(foldTraces=True,makeReferenceVelocities=True,runFTAN=True,
         print(' ')
 
     if makeReferenceVelocities is True:
-        refMinSNR=8
-        refMinWavelengths=2
+        refMinSNR=6
+        refMinWavelengths=2.5
         refPhvelDict = {}
-        for period in periods:
+        refperiods = np.arange(0,15,0.2)
+        for period in refperiods:
             refPhvelDict[period] = fmstUtils.getReferenceVelocity(stationDict=stationDict,
                                                                   dataDirectory=dataDirectory,
                                                                   FTANDirectory=f'{ftanDirectory}/Folded',
