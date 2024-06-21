@@ -31,6 +31,7 @@ import numpy as np
 import obspy
 from obspy.clients.fdsn import Client
 import matplotlib.pyplot as plt
+from deprecated import deprecated
 
 import swtUtils.ftan as ft #pylint: disable=import-error
 #pylint: disable=invalid-name
@@ -136,7 +137,7 @@ def getValidStations(network,bounds,channel,stationList):
 
     stationDict = {}
     for net in inventoryCopy:
-        for station in network:
+        for station in net:
             stationDict[f'{net.code}.{station.code}'] = (station.latitude,station.longitude)
 
     return stationDict
@@ -177,6 +178,51 @@ def makeTomoDirectory(dataDirectory,periods,component):
             os.mkdir(periodFolder)
 
     return tomoDirectory
+
+def getReferenceVelocity(stationDict,dataDirectory,FTANDirectory,period,component,minSNR,minWavelengths):
+    componentDirectory = getComponentDirectory(dataDirectory,component)
+    stationList = list(stationDict.keys())
+    interpErrorDict = makeInterpErrorDict()
+
+    phvels = []
+    for stat1 in tqdm(stationList):
+        for stat2 in stationList:
+            if stat1 == stat2:
+                continue
+
+            filepath = checkIfFTANExists(stat1,stat2,FTANDirectory)
+            if filepath is None:
+                continue
+
+            dist = getDist(stat1,stat2,componentDirectory)
+            if dist is None:
+                continue
+
+            df = ft.dispOutputToDF(filepath)
+            obper,phvel,snr = ft.getRelevantInfo(df)
+
+            interpOut = interpPeriod(period,obper,phvel,snr)
+            interpOut, interpErrorDict = _interpPeriodErrorHandler(interpOut,interpErrorDict)
+            if interpOut is None:
+                continue
+
+            phvel = interpOut[0]
+            snr = interpOut[1]
+
+            if phvel < 1.5 or phvel > 5:
+                continue
+
+            if snr < minSNR:
+                continue
+
+            minDist = minWavelengths * getWavelength(period,phvel)
+            if dist < minDist:
+                continue
+
+            phvels.append(phvel)
+
+    avgPhvel = round(float(np.mean(phvels)),4)
+    return avgPhvel
 
 def makeIssueDict():
     """Makes the empty issue dict"""
@@ -565,6 +611,8 @@ def setupFTANDirectory(FMSTDirectory,period,projectCode,component,_overwrite=Fal
 
     return fmstPath
 
+@deprecated(reason="Instead of using the avg velocity for all data, it's" +
+            "better to use the reference curve made in main using getReferenceVelocity")
 def getAvgVelocity(dataDirectory,period,component):
     """Reads the previously pickled average velocity for that period"""
     tomoDirectory = getTomoDirectory(dataDirectory,component) + f'/{period}s'

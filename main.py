@@ -28,8 +28,9 @@ import numpy as np
 from swtUtils import ftan, fmstUtils
 
 
-def main(foldTraces=True,runFTAN=True,makeFMSTInputs=True,
-         setupFMSTDirectory=True,runInversion=True,runOnlyGMT=False):
+def main(foldTraces=True,makeReferenceVelocities=True,runFTAN=True,
+         makeFMSTInputs=True,setupFMSTDirectory=True,runInversion=True,
+         runOnlyGMT=False):
     """
     The main function of swtu. You should read each of the 6 input parameters
     as their own individual steps, and documentation is included progressively
@@ -60,6 +61,12 @@ def main(foldTraces=True,runFTAN=True,makeFMSTInputs=True,
     component='ZZ'
     projectCode='Rainier'
     periods = list(np.arange(1,20,1))
+    network = 'UW,CC,XU,XD,TA,YH'
+    channel='BH*,HH*,EH*'
+    bound_box = [46.1,47.3,-122.5,-120.9]
+
+    stationList = fmstUtils.getLocalStations(dataDirectory,'ZZ')
+    stationDict = fmstUtils.getValidStations(network,bound_box,channel,stationList)
 
     if foldTraces is True:
         # First step is to fold all of the two-sided traces
@@ -91,25 +98,42 @@ def main(foldTraces=True,runFTAN=True,makeFMSTInputs=True,
         subprocess.call(f'{ftanDirectory}/runFTAN.csh',cwd=ftanDirectory)
         print(' ')
 
+    if makeReferenceVelocities is True:
+        refMinSNR=8
+        refMinWavelengths=2
+        refPhvelDict = {}
+        for period in periods:
+            refPhvelDict[period] = fmstUtils.getReferenceVelocity(stationDict=stationDict,
+                                                                  dataDirectory=dataDirectory,
+                                                                  FTANDirectory=f'{ftanDirectory}/Folded',
+                                                                  period=period,
+                                                                  component=component,
+                                                                  minSNR=refMinSNR,
+                                                                  minWavelengths=refMinWavelengths)
+
+        fmstUtils.saveObj(refPhvelDict,f'{dataDirectory}/Tomography/{component}/refPhvelCurve.pkl')
+
+    refPhvelDict = fmstUtils.loadObj(f'{dataDirectory}/Tomography/{component}/refPhvelCurve.pkl')
+
+    plt.plot(list(refPhvelDict.keys()),list(refPhvelDict.values()))
+    plt.title(f'SNR {refMinSNR} at >{refMinWavelengths} wavelengths')
+    plt.xlabel('Period')
+    plt.ylabel('Phase Velocity (km/s)')
+    plt.show()
+
     if makeFMSTInputs is True:
         # The next step is to define the periods we want to make phase vel maps for
 
         fmstUtils.makeTomoDirectory(dataDirectory,periods,component)
         for period in periods:
             print(f'=====Working on FMST Outputs for {period}s...=====')
-            network = 'UW,CC,XU,XD,TA,YH'
-            channel='BH*,HH*,EH*'
-            bound_box = [46.1,47.3,-122.5,-120.9]
-
-            stationList = fmstUtils.getLocalStations(dataDirectory,'ZZ')
-            stationDict = fmstUtils.getValidStations(network,bound_box,channel,stationList)
 
             phvels = fmstUtils.makeFMSTInputs(stationDict=stationDict,
                                               dataDirectory=dataDirectory,
                                               FTANDirectory=f'{ftanDirectory}/Folded',
                                               period=period,
                                               component=component,
-                                              minSNR=3,
+                                              minSNR=5,
                                               minWavelengths=1.5,
                                               detailedError=True)
 
@@ -178,7 +202,8 @@ def main(foldTraces=True,runFTAN=True,makeFMSTInputs=True,
 if __name__ == '__main__':
     main(foldTraces=False,
          runFTAN=False,
+         makeReferenceVelocities=True,
          makeFMSTInputs=False,
          setupFMSTDirectory=False,
-         runInversion=True,
-         runOnlyGMT=True)
+         runInversion=False,
+         runOnlyGMT=False)
