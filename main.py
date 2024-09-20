@@ -55,18 +55,20 @@ def main(foldTraces=True,makeReferenceVelocities=True,runFTAN=True,
 
     """
 
-    dataDirectory = '/Volumes/NewHDant/RainierAmbient'
+    dataDirectory = '/Volumes/NewHDant/RainierAmbient2'
     ftanDirectory = '/Users/thomaslee/FTAN'
     fmstDirectory = '/Users/thomaslee/fmst_v1.1'
     component='ZZ'
     projectCode='Rainier'
     periods = list(np.arange(1,20,1))
-    network = 'UW,CC,XU,XD,TA,YH'
+    network = 'UW,CC,XU,XD,TA,YH,YW'
     channel='BH*,HH*,EH*'
-    bound_box = [46.1,47.3,-122.5,-120.9]
+    bound_box = [46.0796,47.8242,-122.8625,-120.25]
 
     stationList = fmstUtils.getLocalStations(dataDirectory,'ZZ')
+    print('Acquiring valid stations...')
     stationDict = fmstUtils.getValidStations(network,bound_box,channel,stationList)
+    print('Stations acquired')
 
     if foldTraces is True:
         # First step is to fold all of the two-sided traces
@@ -99,6 +101,7 @@ def main(foldTraces=True,makeReferenceVelocities=True,runFTAN=True,
         print(' ')
 
     if makeReferenceVelocities is True:
+        fmstUtils.makeTomoDirectory(dataDirectory,periods,component)
         refMinSNR=6
         refMinWavelengths=2.5
         refPhvelDict = {}
@@ -114,13 +117,13 @@ def main(foldTraces=True,makeReferenceVelocities=True,runFTAN=True,
 
         fmstUtils.saveObj(refPhvelDict,f'{dataDirectory}/Tomography/{component}/refPhvelCurve.pkl')
 
-    refPhvelDict = fmstUtils.loadObj(f'{dataDirectory}/Tomography/{component}/refPhvelCurve.pkl')
+        refPhvelDict = fmstUtils.loadObj(f'{dataDirectory}/Tomography/{component}/refPhvelCurve.pkl')
 
-    plt.plot(list(refPhvelDict.keys()),list(refPhvelDict.values()))
-    plt.title(f'SNR {refMinSNR} at >{refMinWavelengths} wavelengths')
-    plt.xlabel('Period')
-    plt.ylabel('Phase Velocity (km/s)')
-    plt.show()
+        plt.plot(list(refPhvelDict.keys()),list(refPhvelDict.values()))
+        plt.title(f'SNR {refMinSNR} at >{refMinWavelengths} wavelengths')
+        plt.xlabel('Period')
+        plt.ylabel('Phase Velocity (km/s)')
+        plt.show()
 
     if makeFMSTInputs is True:
         # The next step is to define the periods we want to make phase vel maps for
@@ -148,9 +151,9 @@ def main(foldTraces=True,makeReferenceVelocities=True,runFTAN=True,
             fmstUtils.saveObj(avgPhvel,f'{tomoDirectory}/avgPhvel.pkl')
 
 
-            print(fmstUtils.loadObj(f'/Volumes/NewHDant/RainierAmbient/Tomography/ZZ/{period}s/interpErrorDict.pkl'))
-            print(fmstUtils.loadObj(f'/Volumes/NewHDant/RainierAmbient/Tomography/ZZ/{period}s/issueDict.pkl'))
-            print(fmstUtils.loadObj(f'/Volumes/NewHDant/RainierAmbient/Tomography/ZZ/{period}s/fpDict.pkl'))
+            print(fmstUtils.loadObj(f'{dataDirectory}/Tomography/ZZ/{period}s/interpErrorDict.pkl'))
+            print(fmstUtils.loadObj(f'{dataDirectory}/Tomography/ZZ/{period}s/issueDict.pkl'))
+            print(fmstUtils.loadObj(f'{dataDirectory}/Tomography/ZZ/{period}s/fpDict.pkl'))
             print(' ')
 
     if setupFMSTDirectory is True:
@@ -203,8 +206,8 @@ def main(foldTraces=True,makeReferenceVelocities=True,runFTAN=True,
 if __name__ == '__main__':
     main(foldTraces=False,
          runFTAN=False,
-         makeReferenceVelocities=True,
+         makeReferenceVelocities=False,
          makeFMSTInputs=False,
-         setupFMSTDirectory=False,
-         runInversion=False,
+         setupFMSTDirectory=True,
+         runInversion=True,
          runOnlyGMT=False)
