@@ -65,7 +65,7 @@ def main(foldTraces=True,makeReferenceVelocities=True,runFTAN=True,
     channel='BH*,HH*,EH*'
     bound_box = [46.0796,47.8242,-122.8625,-120.25]
 
-    stationList = fmstUtils.getLocalStations(dataDirectory,'ZZ')
+    stationList = fmstUtils.getLocalStations(dataDirectory,'ZZ',forceOverwrite=False)
     print('Acquiring valid stations...')
     stationDict = fmstUtils.getValidStations(network,bound_box,channel,stationList)
     print('Stations acquired')
@@ -105,7 +105,7 @@ def main(foldTraces=True,makeReferenceVelocities=True,runFTAN=True,
         refMinSNR=6
         refMinWavelengths=2.5
         refPhvelDict = {}
-        refperiods = np.arange(0,15,0.2)
+        refperiods = np.arange(0,15,0.5)
         for period in refperiods:
             refPhvelDict[period] = fmstUtils.getReferenceVelocity(stationDict=stationDict,
                                                                   dataDirectory=dataDirectory,

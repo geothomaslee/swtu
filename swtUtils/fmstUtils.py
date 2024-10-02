@@ -78,20 +78,31 @@ def getStationNames(filepath):
 
     return stat1, stat2
 
-def getLocalStations(dataDirectory,component):
+def getLocalStations(dataDirectory,component,forceOverwrite=True):
     """Returns a list of stations that we have cross-correlations for"""
     componentDirectory = getComponentDirectory(dataDirectory,component)
 
-    if not os.path.exists(componentDirectory +'/UniqueStations.pkl'):
-        crossCorrelations = glob(componentDirectory + '/*.sac')
-        station_list = []
-        for file in crossCorrelations:
-            stat1, stat2 = getStationNames(file)
+    if forceOverwrite is True:
+        os.remove(componentDirectory + '/UniqueStations.pkl')
 
-            station_list = [s for s in set(station_list + [stat1, stat2]) if s]
-            saveObj(station_list,componentDirectory +'/UniqueStations.pkl')
-    else:
-        station_list = loadObj(componentDirectory +'/UniqueStations.pkl')
+    try:
+        if not os.path.exists(componentDirectory +'/UniqueStations.pkl'):
+            crossCorrelations = glob(componentDirectory + '/*.sac')
+            station_list = []
+            print('Searching for local stations...')
+            for file in tqdm(crossCorrelations):
+                stat1, stat2 = getStationNames(file)
+
+                station_list = [s for s in set(station_list + [stat1, stat2]) if s]
+                saveObj(station_list,componentDirectory +'/UniqueStations.pkl')
+        else:
+            print('Searching for local stations...')
+            print('Using existing version of UniqueStations.pkl - Is this intentional?')
+            station_list = loadObj(componentDirectory +'/UniqueStations.pkl')
+    except EOFError:
+        print('EOFError often means that UniqueStations.pkl exists but was written improperly, delete it and try again')
+    except Exception as e:
+        raise e
 
     return station_list
 
@@ -128,6 +139,7 @@ def getValidStations(network,bounds,channel,stationList):
                                     maxlongitude = bounds[3])
 
     inventoryCopy = inventory.copy()
+    inventory.plot()
 
     for net in inventory:
         for station in net:
