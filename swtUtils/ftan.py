@@ -123,3 +123,26 @@ def getPeriodRange(df):
     """Returns the range of periods measured by FTAN"""
     vals = df['obper'].to_list()
     return min(vals),max(vals)
+
+def returnSuccessRate(ftanDirectory):
+    """Reports success rate of FTAN after SNR filtering"""
+    successDict = {'raw' : 0,
+                   'snr' : 0,
+                   '1_DISP' : 0,
+                   '2_DISP' : 0}
+
+    dirpath = f'{ftanDirectory}/Folded'
+
+    files = glob(dirpath + '/*.sac*')
+
+    for file in files:
+        if 'snr' in file:
+            successDict['snr'] += 1
+        elif '1_DISP' in file:
+            successDict['1_DISP'] += 1
+        elif '2_DISP' in file:
+            successDict['2_DISP'] += 1
+        else:
+            successDict['raw'] += 1
+
+    return successDict

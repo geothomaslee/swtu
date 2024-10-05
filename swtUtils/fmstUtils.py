@@ -173,7 +173,7 @@ def makeTomoDirectory(dataDirectory,periods,component):
         raise TypeError('Periods must be a list, see doc for details')
     if len(periods) < 2:
         raise ValueError('Periods must be a list of length >=2, see docs')
-    if len(periods) == 2:
+    if len(periods) == 1:
         periods = range(periods[0],periods[1]+1,1)
 
     tomoDirectory = os.path.expanduser(dataDirectory) + '/Tomography'

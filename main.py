@@ -42,6 +42,13 @@ def main(foldTraces=True,makeReferenceVelocities=True,runFTAN=True,
         Folds the cross-correlations. The default is True.
     runFTAN : bool, optional
         Performs FTAN on the folded traces. The default is True.
+        This is performed on a copy of the folded traces that is moved into the
+        FTAN directory, not the clean copies saved in the dataDirectory.
+    makeReferenceVelocities: bool, optional
+        FMST requires a starting velocity that is used for every cell in the
+        inversion grid, and the model is iteratively improved from there. It is
+        therefore extremely sensitive to the starting velocity, so this function
+        makes reference velocities for every period.
     makeFMSTInputs : bool, optional
         Takes the FTAN outputs and makes properly formatted inputs for FMST, on
         a per period basis. The default is True.
@@ -60,13 +67,13 @@ def main(foldTraces=True,makeReferenceVelocities=True,runFTAN=True,
     fmstDirectory = '/Users/thomaslee/fmst_v1.1'
     component='ZZ'
     projectCode='Rainier'
-    periods = list(np.arange(1,20,1))
+    periods = list(np.arange(5,7,1))
     network = 'UW,CC,XU,XD,TA,YH,YW'
     channel='BH*,HH*,EH*'
     bound_box = [46.0796,47.8242,-122.8625,-120.25]
 
     stationList = fmstUtils.getLocalStations(dataDirectory,'ZZ',forceOverwrite=False)
-    print('Acquiring valid stations...')
+    print('Acquiring list of valid stations from IRIS...')
     stationDict = fmstUtils.getValidStations(network,bound_box,channel,stationList)
     print('Stations acquired')
 
@@ -105,7 +112,7 @@ def main(foldTraces=True,makeReferenceVelocities=True,runFTAN=True,
         refMinSNR=6
         refMinWavelengths=2.5
         refPhvelDict = {}
-        refperiods = np.arange(0,15,0.5)
+        refperiods = np.arange(0,20,0.2)
         for period in refperiods:
             refPhvelDict[period] = fmstUtils.getReferenceVelocity(stationDict=stationDict,
                                                                   dataDirectory=dataDirectory,
@@ -207,7 +214,7 @@ if __name__ == '__main__':
     main(foldTraces=False,
          runFTAN=False,
          makeReferenceVelocities=False,
-         makeFMSTInputs=False,
+         makeFMSTInputs=True,
          setupFMSTDirectory=True,
          runInversion=True,
          runOnlyGMT=False)
