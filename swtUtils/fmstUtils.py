@@ -25,10 +25,12 @@ import os
 import pickle
 import shutil
 from glob import glob
+from typing import List,Tuple,Union
 
 from tqdm import tqdm
 import numpy as np
 import obspy
+from obspy.core.inventory import Inventory
 from obspy.clients.fdsn import Client
 import matplotlib.pyplot as plt
 from deprecated import deprecated
@@ -36,21 +38,21 @@ from deprecated import deprecated
 import swtUtils.ftan as ft #pylint: disable=import-error
 #pylint: disable=invalid-name
 
-def saveObj(obj, filename):
+def saveObj(obj, filename: str):
     """Quick function for pickling a file"""
     with open(filename, 'wb') as f:
         pickle.dump(obj, f)
 
-def loadObj(filename):
+def loadObj(filename: str):
     """Quick function for pickling a file"""
     with open(filename, 'rb') as f:
         return pickle.load(f)
 
-def getStackDirectory(dataDirectory):
+def getStackDirectory(dataDirectory: str) -> str:
     """Returns the stack directory given the data directoy"""
     return os.path.expanduser(dataDirectory + '/Stacks')
 
-def getComponentDirectory(dataDirectory, component):
+def getComponentDirectory(dataDirectory: str, component: str) -> str:
     """Returns the component directory given the data directory"""
     if not isinstance(component, str):
         raise TypeError('Component must be 2 character string. Ex. "ZZ"')
@@ -61,7 +63,7 @@ def getComponentDirectory(dataDirectory, component):
 
     return stackDirectory + f'/{component}'
 
-def getTomoDirectory(dataDirectory,component):
+def getTomoDirectory(dataDirectory: str,component: str) -> str:
     """Returns the tomography directory for the component of interest"""
     if not isinstance(component, str):
         raise TypeError('Component must be 2 character string. Ex. "ZZ"')
@@ -70,7 +72,7 @@ def getTomoDirectory(dataDirectory,component):
 
     return os.path.expanduser(dataDirectory + f'/Tomography/{component}')
 
-def getStationNames(filepath):
+def getStationNames(filepath: str) -> Tuple[str, str]:
     """Pulls the name of the two stations from the name of the file"""
     basename = os.path.basename(filepath)
     name_no_sac = basename[:-4]
@@ -78,7 +80,10 @@ def getStationNames(filepath):
 
     return stat1, stat2
 
-def getLocalStations(dataDirectory,component,forceOverwrite=True):
+def getLocalStations(
+        dataDirectory : str,
+        component : str,
+        forceOverwrite: bool = True) -> List[str]:
     """Returns a list of stations that we have cross-correlations for"""
     componentDirectory = getComponentDirectory(dataDirectory,component)
 
@@ -106,7 +111,11 @@ def getLocalStations(dataDirectory,component,forceOverwrite=True):
 
     return station_list
 
-def getValidStations(network,bounds,channel,stationList):
+def getValidStations(
+        network : str,
+        bounds : Tuple[float,float,float,float],
+        channel : str,
+        stationList : List[str]) -> dict:
     """
     Cross-references our list of stations that we have data for in the
     cross-correlation folder with a search of stations in the IRIS database,
@@ -139,7 +148,6 @@ def getValidStations(network,bounds,channel,stationList):
                                     maxlongitude = bounds[3])
 
     inventoryCopy = inventory.copy()
-    inventory.plot()
 
     for net in inventory:
         for station in net:
@@ -154,7 +162,7 @@ def getValidStations(network,bounds,channel,stationList):
 
     return stationDict
 
-def getInventoryLength(inventory):
+def getInventoryLength(inventory : Inventory) -> int:
     """Returns the number of stations in your inventory"""
     length = 0
     for network in inventory:
@@ -162,7 +170,10 @@ def getInventoryLength(inventory):
 
     return length
 
-def makeTomoDirectory(dataDirectory,periods,component):
+def makeTomoDirectory(
+        dataDirectory : str,
+        periods : str,
+        component : str) -> str:
     """Periods must be a list of all periods, or if only 2 elements, is assumed
     to want every integer period between element 1 and element 2.
 
@@ -191,7 +202,47 @@ def makeTomoDirectory(dataDirectory,periods,component):
 
     return tomoDirectory
 
-def getReferenceVelocity(stationDict,dataDirectory,FTANDirectory,period,component,minSNR,minWavelengths):
+def getReferenceVelocity(
+        stationDict : dict,
+        dataDirectory : str,
+        FTANDirectory : str,
+        period : Union[int,float],
+        component : str,
+        minSNR : Union[int,float],
+        minWavelengths : Union[int,float]) -> Tuple[float,list]:
+    """
+    For every available FTAN file, finds the velocity for a given period. Will
+    return the average of all these measurements to be used as the starting
+    velocity for phase velocity inversions, as well as a list of every phase
+    velocity measurement for plotting histograms.
+
+    Parameters
+    ----------
+    stationDict : dict
+        Dictionary containing all station information in the format
+        {'network.station' : (lat, lon)}
+    dataDirectory : str
+        Path to data directory.
+    FTANDirectory : str
+        Path to FTAN directory.
+    period : Union[int,float]
+        Period of interest.
+    component : str
+        Cross-component. Ex: 'ZZ', 'NE'
+    minSNR : Union[int,float]
+        Minimum signal-to-noise ratio.
+    minWavelengths : Union[int,float]
+        Minimum number of wavelengths between stations to consider. If too close
+        phase velocity measurements are inaccurate.
+
+    Returns
+    -------
+    avgPhvel : float
+        Average phase velocity across the entire study area for a given period.
+    phvels : list[float]
+        List of every measured phase velocity for that period
+
+    """
     componentDirectory = getComponentDirectory(dataDirectory,component)
     stationList = list(stationDict.keys())
     interpErrorDict = makeInterpErrorDict()
@@ -234,7 +285,7 @@ def getReferenceVelocity(stationDict,dataDirectory,FTANDirectory,period,componen
             phvels.append(phvel)
 
     avgPhvel = round(float(np.mean(phvels)),4)
-    return avgPhvel
+    return avgPhvel, phvel
 
 def makeIssueDict():
     """Makes the empty issue dict"""
