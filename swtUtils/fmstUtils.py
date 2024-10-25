@@ -202,6 +202,10 @@ def makeTomoDirectory(
 
     return tomoDirectory
 
+def get_all_ftan_outputs(FTANDirectory: str) -> list:
+    all_ftan_outputs = glob(f'{FTANDirectory}/*_2_DISP.1')
+    return set(all_ftan_outputs)
+
 def getReferenceVelocity(
         stationDict : dict,
         dataDirectory : str,
@@ -247,13 +251,15 @@ def getReferenceVelocity(
     stationList = list(stationDict.keys())
     interpErrorDict = makeInterpErrorDict()
 
+    ftan_output_list = get_all_ftan_outputs(FTANDirectory)
+
     phvels = []
     for stat1 in tqdm(stationList):
         for stat2 in stationList:
             if stat1 == stat2:
                 continue
 
-            filepath = checkIfFTANExists(stat1,stat2,FTANDirectory)
+            filepath = checkIfFTANExists(stat1,stat2,FTANDirectory,ftan_output_list)
             if filepath is None:
                 continue
 
@@ -437,6 +443,8 @@ def makeFMSTInputs(stationDict,dataDirectory,FTANDirectory,period,component,minS
 
     open(timesFile,'w',encoding='utf-8').close()
 
+    ftan_output_list = get_all_ftan_outputs(FTANDirectory)
+
     phvels = []
     with open(timesFile, 'a',encoding='utf-8') as outfile:
         #outfile.write(f'{len(stationList)**2}\n')
@@ -447,7 +455,8 @@ def makeFMSTInputs(stationDict,dataDirectory,FTANDirectory,period,component,minS
                     outfile.write('0 0.0000 1.0\n')
                     continue
 
-                filepath = checkIfFTANExists(stat1,stat2,FTANDirectory)
+                filepath = checkIfFTANExists(stat1,stat2,FTANDirectory,ftan_output_list)
+
                 if filepath is None:
                     issue_dict['filepath not exist'] += 1
                     outfile.write('0 0.0000 1.0\n')
@@ -566,12 +575,12 @@ def _interpPeriodErrorHandler(interpPeriodOut,interpPeriodDict):
 
     return None, interpPeriodDict
 
-def checkIfFTANExists(stat1,stat2,FTANDirectory):
+def checkIfFTANExists(stat1,stat2,FTANDirectory,ftan_output_list):
     """Checks if an FTAN output from AFTAN (Bensen) exists"""
-    if os.path.exists(FTANDirectory + f'/{stat1}_{stat2}_Folded.sac_2_DISP.1'):
+    if f'{FTANDirectory}/{stat1}_{stat2}_Folded.sac_2_DISP.1' in ftan_output_list:
         return FTANDirectory + f'/{stat1}_{stat2}_Folded.sac_2_DISP.1'
 
-    if os.path.exists(FTANDirectory + f'/{stat2}_{stat1}_Folded.sac_2_DISP.1'):
+    if f'{FTANDirectory}/{stat2}_{stat1}_Folded.sac_2_DISP.1' in ftan_output_list:
         return FTANDirectory + f'/{stat2}_{stat1}_Folded.sac_2_DISP.1'
 
     return None
