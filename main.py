@@ -28,9 +28,14 @@ import numpy as np
 from swtUtils import ftan, fmstUtils
 
 
-def main(foldTraces=True,makeReferenceVelocities=True,runFTAN=True,
-         makeFMSTInputs=True,setupFMSTDirectory=True,runInversion=True,
-         runOnlyGMT=False):
+def main(
+        foldTraces: bool=True,
+        makeReferenceVelocities: bool=True,
+        runFTAN: bool=True,
+        makeFMSTInputs: bool=True,
+        setupFMSTDirectory: bool=True,
+        runInversion: bool=True,
+        runOnlyGMT: bool=False):
     """
     The main function of swtu. You should read each of the 6 input parameters
     as their own individual steps, and documentation is included progressively
@@ -67,7 +72,7 @@ def main(foldTraces=True,makeReferenceVelocities=True,runFTAN=True,
     fmstDirectory = '/Users/thomaslee/fmst_v1.1'
     component='ZZ'
     projectCode='Rainier'
-    periods = list(np.arange(5,7,1))
+    periods = list(np.arange(1,16,1))
     network = 'UW,CC,XU,XD,TA,YH,YW'
     channel='BH*,HH*,EH*'
     bound_box = [46.0796,47.8242,-122.8625,-120.25]
@@ -78,19 +83,25 @@ def main(foldTraces=True,makeReferenceVelocities=True,runFTAN=True,
     print('Stations acquired')
 
     if foldTraces is True:
-        # First step is to fold all of the two-sided traces
-        # This helps increase signal recovery, especially in places where the cross-correlations
-        # are heavily one-sided, such as near the ocean
-        print('====FOLDING TRACES=====')
+        """
+        First step is to fold all of the two-sided traces
+        This helps increase signal recovery, especially in places where the cross-correlations
+        are heavily one-sided, such as near the ocean
+        These are placed inside FTAN/Folded
+        """
+        print('======================FOLDING TRACES==========================')
         ftan.foldAllTraces(dataDirectory,component)
         print(' ')
 
     if runFTAN is True:
-        # Now we perform FTAN analysis using runFTAN.csh
-        # This script is a hand-me-down script through several generations of students
-        # in Brandon Schmandt's group, that I updated the documentation for extensively
-        # Originally this script would throw out low SNR and stations that it estimated
-        # to be too close, but I don't like how it does that so I do that myself later
+        """
+        Now we perform FTAN analysis using runFTAN.csh
+        This script is a hand-me-down script through several generations of students
+        in Brandon Schmandt's group, that I updated the documentation for extensively
+
+        October 25, 2024 Update: This code doesn't work, I don't know why, but
+        just run the script directly in your terminal to do it manually.
+        """
 
         print('=====RUNNING FTAN ANALYSIS=====')
         print('Copying folded SAC files to FTAN directory...')
@@ -108,19 +119,27 @@ def main(foldTraces=True,makeReferenceVelocities=True,runFTAN=True,
         print(' ')
 
     if makeReferenceVelocities is True:
+        """
+        This creates a reference velocity curve that represents an average for
+        the entire region, and is also used as a starting velocity for every cell
+        in the tomographic region later on.
+        """
+        print('=======CREATING REFERENCE VELOCITY CURVE=======')
         fmstUtils.makeTomoDirectory(dataDirectory,periods,component)
         refMinSNR=6
-        refMinWavelengths=2.5
+        refMinWavelengths=2
         refPhvelDict = {}
         refperiods = np.arange(0,20,0.2)
         for period in refperiods:
-            refPhvelDict[period] = fmstUtils.getReferenceVelocity(stationDict=stationDict,
-                                                                  dataDirectory=dataDirectory,
-                                                                  FTANDirectory=f'{ftanDirectory}/Folded',
-                                                                  period=period,
-                                                                  component=component,
-                                                                  minSNR=refMinSNR,
-                                                                  minWavelengths=refMinWavelengths)
+            refPhvelDict[period],phvels = fmstUtils.getReferenceVelocity(
+                                            stationDict=stationDict,
+                                            dataDirectory=dataDirectory,
+                                            FTANDirectory=f'{ftanDirectory}/Folded',
+                                            period=period,
+                                            component=component,
+                                            minSNR=refMinSNR,
+                                            minWavelengths=refMinWavelengths)
+            #fmstUtils.saveObj(phvels,f'{dataDirectory}/Tomography/{component}/{period}s_refPhvels.pkl')
 
         fmstUtils.saveObj(refPhvelDict,f'{dataDirectory}/Tomography/{component}/refPhvelCurve.pkl')
 
@@ -133,7 +152,11 @@ def main(foldTraces=True,makeReferenceVelocities=True,runFTAN=True,
         plt.show()
 
     if makeFMSTInputs is True:
-        # The next step is to define the periods we want to make phase vel maps for
+        """
+        This creates properly formatted input files for FMST which are used
+        later to set up a full FMST directory.
+
+        """
 
         fmstUtils.makeTomoDirectory(dataDirectory,periods,component)
         for period in periods:
@@ -144,19 +167,21 @@ def main(foldTraces=True,makeReferenceVelocities=True,runFTAN=True,
                                               FTANDirectory=f'{ftanDirectory}/Folded',
                                               period=period,
                                               component=component,
-                                              minSNR=5,
+                                              minSNR=3,
                                               minWavelengths=1.5,
                                               detailedError=True)
 
+            fmstUtils.saveObj(phvels,f'{dataDirectory}/Tomography/{component}/{period}s_allPhvel.pkl')
+
+            plt.figure()
             plt.hist(phvels,bins=np.arange(1.5,5,0.2))
             plt.title(f'{period}s Rayleigh Wave Phase Velocities')
             plt.xlabel('Phase Velocity (km/s)')
-            plt.show()
+            plt.savefig(f'{dataDirectory}/Figures/{period}s_PhaseDistribution.png')
 
             avgPhvel = round(float(np.mean(phvels)),4)
             tomoDirectory = fmstUtils.getTomoDirectory(dataDirectory,component) + f'/{period}s'
             fmstUtils.saveObj(avgPhvel,f'{tomoDirectory}/avgPhvel.pkl')
-
 
             print(fmstUtils.loadObj(f'{dataDirectory}/Tomography/ZZ/{period}s/interpErrorDict.pkl'))
             print(fmstUtils.loadObj(f'{dataDirectory}/Tomography/ZZ/{period}s/issueDict.pkl'))
@@ -164,6 +189,12 @@ def main(foldTraces=True,makeReferenceVelocities=True,runFTAN=True,
             print(' ')
 
     if setupFMSTDirectory is True:
+        """
+        This uses the previously created travel time inputs as well as a "master"
+        FMST folder that contains files used for the inversion for every period,
+        to ensure that inversion parameters (except for the actual measurements)
+        are used consistently in all the phase inversions.
+        """
         for period in periods:
             tomoDirectory = fmstUtils.getTomoDirectory(dataDirectory,component) + f'/{period}s'
             fmstPath = fmstUtils.setupFTANDirectory(FMSTDirectory=fmstDirectory,
@@ -180,6 +211,9 @@ def main(foldTraces=True,makeReferenceVelocities=True,runFTAN=True,
             fmstUtils.editBackgroundVel(fmstPath,avgPhvel)
 
     if runInversion is True:
+        """
+        This runs the inversions!
+        """
         for i,period in enumerate(periods):
             fmstDir = f'{fmstDirectory}/{projectCode}_{period}s_{component}'
             if runOnlyGMT is False:
@@ -205,16 +239,18 @@ def main(foldTraces=True,makeReferenceVelocities=True,runFTAN=True,
             subprocess.run(['chmod','+x', './plotgmt6'],cwd=gmtplotDir,check=False)
             subprocess.call(f'{gmtplotDir}/plotgmt6',cwd=gmtplotDir)
 
+    """
     fmstUtils.findAllFinalTomoImages(fmstPath=fmstDirectory,
                                      projectCode=projectCode,
                                      component=component,
                                      periods=periods)
+    """
 
 if __name__ == '__main__':
     main(foldTraces=False,
          runFTAN=False,
          makeReferenceVelocities=False,
          makeFMSTInputs=True,
-         setupFMSTDirectory=True,
-         runInversion=True,
+         setupFMSTDirectory=False,
+         runInversion=False,
          runOnlyGMT=False)
