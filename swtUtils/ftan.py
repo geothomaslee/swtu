@@ -20,17 +20,19 @@ Citations:
 import os
 from glob import glob
 from math import floor
+from typing import Tuple
 
 import obspy
 from obspy import Trace
 from tqdm import tqdm
 import pandas as pd
+from pandas import DataFrame
 
-def getStackDirectory(dataDirectory):
+def getStackDirectory(dataDirectory: str) -> str:
     """Returns the stack directory given the data directoy"""
     return os.path.expanduser(dataDirectory + '/Stacks')
 
-def getComponentDirectory(dataDirectory, component):
+def getComponentDirectory(dataDirectory: str, component: str) -> str:
     """Returns the component directory given the data directory"""
     if not isinstance(component, str):
         raise TypeError('Component must be 2 character string. Ex. "ZZ"')
@@ -41,12 +43,12 @@ def getComponentDirectory(dataDirectory, component):
 
     return stackDirectory + f'/{component}'
 
-def getSACFileList(componentDirectory):
+def getSACFileList(componentDirectory: str) -> list:
     """Returns a list of SAC files in the component directory"""
     fileList = glob(componentDirectory + '/*.sac')
     return fileList
 
-def getFoldDirectory(dataDirectory, component):
+def getFoldDirectory(dataDirectory: str, component: str) -> str:
     """Returns the directory containing folded traces"""
     componentDirectory = getComponentDirectory(dataDirectory,component)
     foldDirectory = componentDirectory + '/Folded'
@@ -56,7 +58,7 @@ def getFoldDirectory(dataDirectory, component):
 
     return foldDirectory
 
-def getSACDict(tr):
+def getSACDict(tr: Trace) -> dict:
     """SAC Dict properly formatted for applying headers after folding"""
     sacDict = tr.stats.sac
 
@@ -68,7 +70,7 @@ def getSACDict(tr):
 
     return sacDict
 
-def foldTrace(tr):
+def foldTrace(tr: Trace) -> Trace:
     """Returns a folded version of the trace"""
     if (tr.stats.npts %2) != 1:
         raise ValueError('Trace must have an odd number of points')
@@ -87,7 +89,7 @@ def foldTrace(tr):
 
     return new_tr
 
-def foldAllTraces(dataDirectory,component):
+def foldAllTraces(dataDirectory: str,component: str):
     """Folds all traces and puts them in separate folded directory"""
     foldDirectory = getFoldDirectory(dataDirectory,component)
     componentDirectory = getComponentDirectory(dataDirectory,component)
@@ -101,30 +103,30 @@ def foldAllTraces(dataDirectory,component):
         savePath = foldDirectory + f'/{basename}_Folded.sac'
         folded_tr.write(savePath)
 
-def dispOutputToDF(file):
+def dispOutputToDF(file: str) -> DataFrame:
     """Turns disp file into df"""
     columns=['nf','cper','obper','gvel','phvel','ampl','snr']
-    df = pd.read_csv(file,delim_whitespace=True,names=columns)
+    df = pd.read_csv(file,sep='\s+',names=columns)
     return df
 
-def findDispFiles(dispDirectory):
+def findDispFiles(dispDirectory: str) -> list:
     """Finds all final FTAN output files"""
     fileList = glob(dispDirectory + '/*2_DISP.1*')
     return fileList
 
-def getRelevantInfo(df):
+def getRelevantInfo(df: DataFrame) -> Tuple[list,list,list]:
     """Returns observed period, phase velocity, and snr info"""
     obper = df['obper'].to_list()
     phvel = df['phvel'].to_list()
     snr = df['snr'].to_list()
     return obper,phvel,snr
 
-def getPeriodRange(df):
+def getPeriodRange(df: DataFrame) -> Tuple[float, float]:
     """Returns the range of periods measured by FTAN"""
     vals = df['obper'].to_list()
     return min(vals),max(vals)
 
-def returnSuccessRate(ftanDirectory):
+def returnSuccessRate(ftanDirectory: str) -> dict:
     """Reports success rate of FTAN after SNR filtering"""
     successDict = {'raw' : 0,
                    'snr' : 0,
