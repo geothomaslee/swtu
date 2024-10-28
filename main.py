@@ -158,35 +158,41 @@ def main(
 
         """
 
-        fmstUtils.makeTomoDirectory(dataDirectory,periods,component)
-        for period in periods:
-            print(f'=====Working on FMST Outputs for {period}s...=====')
+        SNRs_To_Test = [5]
 
-            phvels = fmstUtils.makeFMSTInputs(stationDict=stationDict,
-                                              dataDirectory=dataDirectory,
-                                              FTANDirectory=f'{ftanDirectory}/Folded',
-                                              period=period,
-                                              component=component,
-                                              minSNR=3,
-                                              minWavelengths=1.5,
-                                              detailedError=True)
+        for snr in SNRs_To_Test:
 
-            fmstUtils.saveObj(phvels,f'{dataDirectory}/Tomography/{component}/{period}s_allPhvel.pkl')
+            fmstUtils.makeTomoDirectory(dataDirectory,periods,component)
+            for period in periods:
+                print(f'=====Working on FMST Outputs for {period}s...=====')
 
-            plt.figure()
-            plt.hist(phvels,bins=np.arange(1.5,5,0.2))
-            plt.title(f'{period}s Rayleigh Wave Phase Velocities')
-            plt.xlabel('Phase Velocity (km/s)')
-            plt.savefig(f'{dataDirectory}/Figures/{period}s_PhaseDistribution.png')
+                phvels = fmstUtils.makeFMSTInputs(stationDict=stationDict,
+                                                  dataDirectory=dataDirectory,
+                                                  FTANDirectory=f'{ftanDirectory}/Folded_SNR_{snr}',
+                                                  period=period,
+                                                  component=component,
+                                                  minSNR=3,
+                                                  minWavelengths=1.5,
+                                                  detailedError=True)
 
-            avgPhvel = round(float(np.mean(phvels)),4)
-            tomoDirectory = fmstUtils.getTomoDirectory(dataDirectory,component) + f'/{period}s'
-            fmstUtils.saveObj(avgPhvel,f'{tomoDirectory}/avgPhvel.pkl')
+                fmstUtils.saveObj(phvels,f'{dataDirectory}/Tomography/{component}/{period}s_allPhvel.pkl')
 
-            print(fmstUtils.loadObj(f'{dataDirectory}/Tomography/ZZ/{period}s/interpErrorDict.pkl'))
-            print(fmstUtils.loadObj(f'{dataDirectory}/Tomography/ZZ/{period}s/issueDict.pkl'))
-            print(fmstUtils.loadObj(f'{dataDirectory}/Tomography/ZZ/{period}s/fpDict.pkl'))
-            print(' ')
+                avgvel = np.mean(phvels)
+
+                plt.figure()
+                plt.hist(phvels,bins=np.arange(1.5,5,0.2))
+                plt.title(f'{period}s Rayleigh Wave Phase Velocities: {avgvel} km/s Average')
+                plt.xlabel('Phase Velocity (km/s)')
+                plt.savefig(f'{dataDirectory}/Figures/{period}s_PhaseDistribution_SNR_{snr}.png')
+
+                avgPhvel = round(float(np.mean(phvels)),4)
+                tomoDirectory = fmstUtils.getTomoDirectory(dataDirectory,component) + f'/{period}s'
+                fmstUtils.saveObj(avgPhvel,f'{tomoDirectory}/avgPhvel.pkl')
+
+                print(fmstUtils.loadObj(f'{dataDirectory}/Tomography/ZZ/{period}s/interpErrorDict.pkl'))
+                print(fmstUtils.loadObj(f'{dataDirectory}/Tomography/ZZ/{period}s/issueDict.pkl'))
+                print(fmstUtils.loadObj(f'{dataDirectory}/Tomography/ZZ/{period}s/fpDict.pkl'))
+                print(' ')
 
     if setupFMSTDirectory is True:
         """
