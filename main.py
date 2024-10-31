@@ -20,9 +20,13 @@ import subprocess
 import shutil
 import os
 import time
+from math import ceil
 
 import matplotlib.pyplot as plt
 import numpy as np
+from glob import glob
+import pandas as pd
+from tqdm import tqdm
 
 #pylint: disable=import-error
 from swtUtils import ftan, fmstUtils
@@ -30,6 +34,7 @@ from swtUtils import ftan, fmstUtils
 
 def main(
         foldTraces: bool=True,
+        create_station_pairs_df: bool=True,
         makeReferenceVelocities: bool=True,
         runFTAN: bool=True,
         makeFMSTInputs: bool=True,
@@ -76,6 +81,7 @@ def main(
     network = 'UW,CC,XU,XD,TA,YH,YW'
     channel='BH*,HH*,EH*'
     bound_box = [46.0796,47.8242,-122.8625,-120.25]
+    check_specific_station_pair = True
 
     stationList = fmstUtils.getLocalStations(dataDirectory,'ZZ',forceOverwrite=False)
     print('Acquiring list of valid stations from IRIS...')
@@ -117,6 +123,27 @@ def main(
 
         subprocess.call(f'{ftanDirectory}/runFTAN.csh',cwd=ftanDirectory)
         print(' ')
+
+    if create_station_pairs_df:
+        all_files = glob(f'{ftanDirectory}/Folded/*2_DISP.1')
+        stat_pairs = []
+
+        for file in all_files:
+            stat1 = file.split('/')[-1].split('_')[0]
+            stat2 = file.split('/')[-1].split('_')[1]
+            lat1 = stationDict[stat1][0]
+            lon1 = stationDict[stat1][1]
+            lat2 = stationDict[stat2][0]
+            lon2 = stationDict[stat2][1]
+            stat_pairs.append((stat1,lat1,lon1,stat2,lat2,lon2))
+
+        df = pd.DataFrame(stat_pairs,columns=['Station1','Station1_Lat',
+                                              'Station1_Lon','Station2',
+                                              'Station2_Lat','Station2_Lon'])
+
+        period_columns = [f'velocity_period_{i}' for i in periods]
+        for col in period_columns:
+            df[col] = np.nan
 
     if makeReferenceVelocities is True:
         """
@@ -160,24 +187,50 @@ def main(
 
         SNRs_To_Test = [5]
 
+        plot_travel_times = True
+
         for snr in SNRs_To_Test:
 
             fmstUtils.makeTomoDirectory(dataDirectory,periods,component)
             for period in periods:
                 print(f'=====Working on FMST Outputs for {period}s...=====')
 
-                phvels = fmstUtils.makeFMSTInputs(stationDict=stationDict,
+                phvels, dists, stat1_list,stat2_list = fmstUtils.makeFMSTInputs(stationDict=stationDict,
                                                   dataDirectory=dataDirectory,
-                                                  FTANDirectory=f'{ftanDirectory}/Folded_SNR_{snr}',
+                                                  FTANDirectory=f'{ftanDirectory}/Folded',
                                                   period=period,
                                                   component=component,
                                                   minSNR=3,
                                                   minWavelengths=1.5,
                                                   detailedError=True)
 
+                for i, phvel in enumerate(phvels):
+                    stat1 = stat1_list[i]
+                    stat2 = stat2_list[i]
+
+                    mask = ((df['Station1'] == stat1) & (df['Station2'] == stat2)) | \
+                           ((df['Station1'] == stat2) & (df['Station1'] == stat1))
+
+                    if mask.any():
+                        df.loc[mask,f'velocity_period_{period}'] = phvel
+
                 fmstUtils.saveObj(phvels,f'{dataDirectory}/Tomography/{component}/{period}s_allPhvel.pkl')
 
                 avgvel = np.mean(phvels)
+
+                if plot_travel_times:
+                    fig, ax = plt.subplots()
+                    travel_times = [a/b for a,b in zip(dists,phvels)]
+                    ax.scatter(dists,travel_times)
+                    ref_vel = 3.113
+                    ref_dists = np.arange(0,ceil(max(dists)),1)
+                    ref_times = ref_dists / ref_vel
+                    ax.plot(ref_dists,ref_times,'g-')
+
+                    plt.title(f'Measured Travel Times for {period}s')
+                    ax.set_xlabel('Distance')
+                    ax.set_ylabel('Travel Time (s)')
+                    plt.show()
 
                 plt.figure()
                 plt.hist(phvels,bins=np.arange(1.5,5,0.2))
@@ -189,10 +242,29 @@ def main(
                 tomoDirectory = fmstUtils.getTomoDirectory(dataDirectory,component) + f'/{period}s'
                 fmstUtils.saveObj(avgPhvel,f'{tomoDirectory}/avgPhvel.pkl')
 
-                print(fmstUtils.loadObj(f'{dataDirectory}/Tomography/ZZ/{period}s/interpErrorDict.pkl'))
-                print(fmstUtils.loadObj(f'{dataDirectory}/Tomography/ZZ/{period}s/issueDict.pkl'))
-                print(fmstUtils.loadObj(f'{dataDirectory}/Tomography/ZZ/{period}s/fpDict.pkl'))
+                #print(fmstUtils.loadObj(f'{dataDirectory}/Tomography/ZZ/{period}s/interpErrorDict.pkl'))
+                #print(fmstUtils.loadObj(f'{dataDirectory}/Tomography/ZZ/{period}s/issueDict.pkl'))
+                #print(fmstUtils.loadObj(f'{dataDirectory}/Tomography/ZZ/{period}s/fpDict.pkl'))
                 print(' ')
+
+        df.round(4)
+        df.to_csv('PhaseVelocities_SNR5_WL1.5.csv')
+
+    if check_specific_station_pair is True:
+
+        df = pd.read_csv('PhaseVelocities.csv')
+
+        stat1 = 'TA.C05A'
+        stat2 = 'TA.D05A'
+        mask = ((df['Station1'] == stat1) & (df['Station2'] == stat2)) | \
+               ((df['Station1'] == stat2) & (df['Station1'] == stat1))
+
+        if mask.any():
+            print(df[mask])
+        else:
+            print('NOT FOUND')
+
+
 
     if setupFMSTDirectory is True:
         """
@@ -253,10 +325,11 @@ def main(
     """
 
 if __name__ == '__main__':
-    main(foldTraces=False,
+    main(foldTraces=True,
+         create_station_pairs_df=True,
          runFTAN=False,
          makeReferenceVelocities=False,
-         makeFMSTInputs=True,
+         makeFMSTInputs=False,
          setupFMSTDirectory=False,
          runInversion=False,
          runOnlyGMT=False)

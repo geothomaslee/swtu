@@ -446,6 +446,9 @@ def makeFMSTInputs(stationDict,dataDirectory,FTANDirectory,period,component,minS
     ftan_output_list = get_all_ftan_outputs(FTANDirectory)
 
     phvels = []
+    dists = []
+    stat1_list = []
+    stat2_list = []
     with open(timesFile, 'a',encoding='utf-8') as outfile:
         #outfile.write(f'{len(stationList)**2}\n')
         for stat1 in tqdm(stationList):
@@ -498,6 +501,9 @@ def makeFMSTInputs(stationDict,dataDirectory,FTANDirectory,period,component,minS
                     continue
 
                 phvels.append(phvel)
+                dists.append(dist)
+                stat1_list.append(stat1)
+                stat2_list.append(stat2)
 
                 travelTime = round(float(getTravelTime(phvel,dist)), 4)
                 issue_dict['good'] += 1
@@ -508,7 +514,7 @@ def makeFMSTInputs(stationDict,dataDirectory,FTANDirectory,period,component,minS
         saveObj(fpDict, f'{periodDirectory}/fpDict.pkl')
         saveObj(interpErrorDict,f'{periodDirectory}/interpErrorDict.pkl')
 
-    return phvels
+    return phvels, dists, stat1_list, stat2_list
 
 def _fparamErrorCodeHandler(fparam_out,fpDict,outfile):
     """Counts the types of errors from fparam"""
