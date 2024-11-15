@@ -43,7 +43,7 @@ First, the traces need to be folded. This is done by setting `foldTraces=True` i
 Foldtraces takes the two sided traces, folds them, and saves them as a new trace with relevant headers pulled from the unfolded trace. These are saved in `/Stacks/{component}/Folded`
 
 #### Run FTAN
-First, the folded cross-correlations are moved into the FTAN home directory into `/Folded`. If the folded directory already exists and contains cross-correlations, it is removed entirely and replaced with the ones saved in `dataDirectory/Stacks/{component}/Folded`. Next the subprocess module is used to call `runFTAN.csh`. That script contains its own documentation, but it should output 3 files for every traces.
+First, the folded cross-correlations are moved into the FTAN home directory into `/Folded`. If the folded directory already exists and contains cross-correlations, it is removed entirely and replaced with the ones saved in `dataDirectory/Stacks/{component}/Folded`. Next the subprocess module is used to call `runFTAN.csh`. NOTE: Recently this script has stopped working when called from within Python, so the best practice is to just manually run that script from your own terminal. That script contains its own documentation, but it should output 3 files for every traces.
 1. A .txt containing SNR information, that is used by the script to throw out low SNRs before even performing FTAN.
 2. A file ending in `.sac_1_DISP.1` which is the initial results, and should not be used.
 3. A file ending in `.sac_2_DISP.1` which contains the final FTAN results and should be used.
