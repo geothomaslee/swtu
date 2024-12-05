@@ -322,7 +322,15 @@ def makeInterpErrorDict():
                        'could not find left or right' : 0}
     return interpErrorDict
 
-def makeFMSTInputs(stationDict,dataDirectory,FTANDirectory,period,component,minSNR,minWavelengths,detailedError=True):
+def makeFMSTInputs(stationDict,
+                   dataDirectory,
+                   FTANDirectory,
+                   period,
+                   component,
+                   minSNR,
+                   minWavelengths,
+                   writeDists=True,
+                   detailedError=True):
     """
     =====OUTPUT FILE INFO======
     Will makes the 3 input files needed by FMST - sources.dat,receivers.dat,
@@ -417,6 +425,11 @@ def makeFMSTInputs(stationDict,dataDirectory,FTANDirectory,period,component,minS
     receiverFile = periodDirectory +'/receivers.dat'
     sourcesFile = periodDirectory +'/sources.dat'
     timesFile = periodDirectory + '/otimes.dat'
+<<<<<<< Updated upstream
+=======
+    ftanMainDirectory = os.path.dirname(FTANDirectory)
+    distFile = ftanMainDirectory + '/distances.dat'
+>>>>>>> Stashed changes
 
     # Creating issue dicts
     issue_dict = makeIssueDict()
@@ -509,6 +522,21 @@ def makeFMSTInputs(stationDict,dataDirectory,FTANDirectory,period,component,minS
                 issue_dict['good'] += 1
                 outfile.write(f'1 {travelTime} 1.0\n')
 
+<<<<<<< Updated upstream
+=======
+    if writeDists:
+        with open(distFile, "w") as distances_file:
+            for stat1 in stationList:
+                for stat2 in stationList:
+                    lat1 = stationDict[stat1][0]
+                    lon1 = stationDict[stat1][1]
+                    lat2 = stationDict[stat2][0]
+                    lon2 = stationDict[stat2][1]
+                    dist = haversine_distance(lat1,lon1,lat2,lon2)
+                    dist_str = f'{dist:.3f} {lat1} {lon1} {lat2} {lon2}\n'
+                    distances_file.write(dist_str)
+
+>>>>>>> Stashed changes
     if detailedError is True:
         saveObj(issue_dict, f'{periodDirectory}/issueDict.pkl')
         saveObj(fpDict, f'{periodDirectory}/fpDict.pkl')
@@ -751,3 +779,448 @@ def findAllFinalTomoImages(fmstPath,projectCode,component,periods):
         fullpath = f'{fmstPath}/{filename}'
         shutil.copyfile(src=fullpath,
                         dst=f'{imgdir}/phvel_{period}s.png')
+<<<<<<< Updated upstream
+=======
+
+def create_output_files(fmstDirectory: str,
+                        periods: List[float]):
+    """Creates the output files for running many combos of inversion parameters"""
+    for period in periods:
+        file_name = f'{fmstDirectory}/{period}s_Outputs'
+        if os.path.exists(file_name):
+            os.remove(file_name)
+
+        with open(file_name, 'w',encoding='utf-8') as file:
+            file.write('')
+
+def get_output_info(fmstDir: str):
+    """
+    Parameters
+    ----------
+    fmstDir : str
+        Path to the FMST directory for this exact run (not the overall FMST
+        directory, but the local directory for this exact run.
+
+    Returns
+    -------
+    rms : float
+        Root mean square misfit in milliseconds of the last iteration
+    variamce : float
+        Variance of the last iteration
+    """
+
+    with open (f'{fmstDir}/residuals.dat',encoding='utf-8') as infile:
+        lines = infile.readlines()
+        rms, variance = lines[-1].split('    ')
+
+    return rms, variance
+
+def edit_inversion_params(fmstPath: str,
+                          smoothing: float,
+                          damping: float,
+                          lon_grids: int,
+                          lat_grids: int):
+    """
+    Parameters
+    ----------
+    fmstDir : str
+        Path to the FMST directory for this exact run (not the overall FMST
+        directory, but the local directory for this exact run.
+    smoothing : float
+        Smoothing parameter.
+    damping : float
+        Damping parameter.
+    lon_grids : int
+        Number of grid cells in the longitudinal axis.
+    lat_grids : int
+        Number of grid cells in the latitudinal axis.
+
+    Returns
+    -------
+    None.
+
+    """
+    # Editing grid size
+    filepath = f'{fmstPath}/mkmodel/grid2dss.in'
+    if not os.path.isfile(filepath):
+        raise ValueError('Could not find grid2dss.in')
+
+    with open(filepath,"r",encoding='utf-8') as infile:
+        lines = infile.readlines()
+        lines[7] = f'{lat_grids}                    c: Number of grid points in theta (N-S)\n'
+        lines[8] = f'{lon_grids}                    c: Number of grid points in theta (N-S)\n'
+
+    with open(filepath,"w",encoding='utf-8') as outfile:
+        for line in lines:
+            outfile.write(line)
+
+    # Editing smoothing and damping
+    filepath = f'{fmstPath}/subinvss.in'
+    if not os.path.isfile(filepath):
+        raise ValueError('Could not find grid2dss.in')
+
+    with open(filepath,"r",encoding='utf-8') as infile:
+        lines = infile.readlines()
+        lines[11] = f'{damping}                       c: Damping factor (epsilon)\n'
+        lines[14] = f'{smoothing}                      c: Smoothing factor (eta)\n'
+
+    with open(filepath,"w",encoding='utf-8') as outfile:
+        for line in lines:
+            outfile.write(line)
+
+def make_residuals_dfs(ftanDir: str,
+                       fmstDir: str,
+                       normalize: bool=True,
+                       debug: bool=False):
+    """
+    Makes a DataFrame
+
+    Parameters
+    ----------
+    ftanDir : str
+        FTAN Directory
+    fmstDir : str
+        DESCRIPTION.
+    debug : bool, optional
+        DESCRIPTION. The default is False.
+
+    Returns
+    -------
+    rtravel_df : TYPE
+        DESCRIPTION.
+    otimes_df : TYPE
+        DESCRIPTION.
+    residuals_df : TYPE
+        DESCRIPTION.
+
+    """
+    rtravel = f'{fmstDir}/rtravel.out' # Source-receiver travel times through solution model
+    otimes = f'{fmstDir}/otimes.dat' # Source-receiver times from real data
+    distances = f'{ftanDir}/distances.dat'
+
+    with open(rtravel,"r",encoding='utf-8') as rtravelfile:
+        travel_times = []
+        indices = []
+        use_list = []
+        for i, line in enumerate(rtravelfile.readlines()):
+            travel_times.append(float(line[:-4].split('   ')[-1]))
+            use_list.append(int(line[:-4].split('   ')[-2][-1:]))
+            indices.append(i)
+
+        df_dict = {'Index': indices, 'Travel_Times': travel_times, 'Use': use_list}
+        rtravel_df = pd.DataFrame(df_dict)
+
+    with open(otimes,"r",encoding='utf-8') as otimes_file:
+        travel_times = []
+        use = []
+        indices = []
+        for i, line in enumerate(otimes_file.readlines()):
+            travel_times.append(float(line.split(' ')[1]))
+            use.append(float(line.split(' ')[0]))
+            indices.append(i)
+
+        df_dict = {'Index': indices, 'Use': use, 'Travel_Times': travel_times}
+        otimes_df = pd.DataFrame(df_dict)
+
+    dists = []
+    with open(distances,'r',encoding='utf-8') as distfile:
+        lines = distfile.readlines()
+
+        for line in lines:
+            entries = line.split(' ')
+            dist = entries[0]
+            dists.append(float(dist))
+
+    residuals = []
+    rtravel_times = rtravel_df['Travel_Times'].to_list()
+    use_travel = rtravel_df['Use'].to_list()
+    otravel_times = otimes_df['Travel_Times'].to_list()
+
+    """
+    # PLACEHOLDER PLACEHOLDER
+    dists = [1 for x in rtravel_times]
+    # PLACEHOLDER PLACEHOLDER
+    """
+
+    if debug:
+        print('===============PRINTING LARGE RESIDUAL CALCULATIONS===============')
+    for i, otravel_time in enumerate(otravel_times):
+        rtravel_time = rtravel_times[i]
+        use_here = use_travel[i]
+        dist = dists[i]
+
+        # If the predicted travel time isn't actually used, set the residual to 0
+        if use_here == 0:
+            residual = 0
+        else:
+            if normalize:
+                residual = (rtravel_time - otravel_time) / dist
+            else:
+                residual = rtravel_time - otravel_time
+        if debug:
+            if np.abs(residual) > 20:
+                print(f'Pre {rtravel_time} - Obs {otravel_time} = {residual} in line {i+1}')
+
+        residuals.append(residual)
+
+    if debug:
+        print('==================================================================')
+
+    df_dict = {'Index': indices, 'Residuals': residuals}
+    residuals_df = pd.DataFrame(df_dict)
+
+    return rtravel_df, otimes_df, residuals_df
+
+def get_residual_statistics(residuals_df: DataFrame):
+    filtered_df = residuals_df[(residuals_df['Residuals'] != 0)]
+    max_residuals = max([np.abs(x) for x in filtered_df['Residuals'].to_list()])
+    avg_residuals = np.mean(filtered_df['Residuals'].to_list())
+    std_residuals = np.std(filtered_df['Residuals'].to_list())
+    avg_abs_residuals = np.mean([np.abs(x) for x in filtered_df['Residuals'].to_list()])
+    print('==================================================================')
+    print(f'Maximum Residual: {max_residuals:.5f}')
+    print(f'Mean: {avg_residuals:.5f}, Standard Deviation: {std_residuals:.5f}')
+    print(f'Mean Residual Magnitude {avg_abs_residuals:.5f}')
+
+    return std_residuals
+
+def remove_worst_fits(otimes_df: DataFrame,
+                    residuals_df: DataFrame,
+                    std_residuals: float,
+                    stds: float,
+                    debug: bool=False):
+
+    # Set travel times to not be used if they come from
+    cleaned_otimes_df = otimes_df.copy()
+    min_residual = stds*std_residuals * -1
+    max_residual = stds*std_residuals
+
+    if debug:
+        print(f"Total Residuals: {len(residuals_df[(residuals_df['Residuals'] != 0)])}")
+        print(f"Total Otimes: {len(otimes_df[(otimes_df['Use'] != 0)])}")
+
+    outside_range_mask = (residuals_df['Residuals'] < min_residual) | (residuals_df['Residuals'] > max_residual)
+
+    if debug:
+        print('BAD RESIDUALS THAT ARE BEING REMOVED')
+        print(residuals_df[outside_range_mask]['Residuals'].to_list())
+
+    cleaned_otimes_df.loc[outside_range_mask, 'Use'] = 0.0
+    indices = np.where(outside_range_mask)[0].tolist()
+
+    print(f"Number to Remove: {len(residuals_df[outside_range_mask]['Index'].to_list())}")
+    print(f"Otimes After Cleaning: {len(cleaned_otimes_df[(cleaned_otimes_df['Use'] != 0)])}")
+    print('==================================================================')
+
+    return cleaned_otimes_df, indices
+
+def rewrite_otimes(fmstDir: str,
+                   otimes_df: DataFrame):
+
+    use_list = [int(x) for x in otimes_df['Use'].to_list()]
+    times_list = otimes_df['Travel_Times'].to_list()
+    otimes_file = f'{fmstDir}/otimes.dat' # Source-receiver times from real data
+
+    with open(otimes_file,'w',encoding='utf-8') as otimes:
+        for i, use in enumerate(use_list):
+            travel_time = times_list[i]
+            if float(travel_time) == 0.0:
+                travel_time = '0.0000'
+            line = f'{use} {travel_time} 1.0\n'
+            otimes.write(line)
+
+def plot_residuals(residuals_df: DataFrame,
+                   title: str,
+                   normalized: bool=True,
+                   period: float=None,
+                   percent: float=None,
+                   binsize: float=5):
+    filtered_df = residuals_df[(residuals_df['Residuals'] != 0)]
+    residuals = filtered_df['Residuals'].to_list()
+    fig, ax = plt.subplots(figsize=(4,8))
+    if normalized is True:
+        ax.hist(residuals)
+    else:
+        ax.hist(residuals,bins=range(int(min(residuals)),int(max(residuals))+binsize,binsize))
+
+    if normalized is True:
+        ax.set_xlabel('Normalized Travel Time\nResiduals (s/km)')
+    else:
+        ax.set_xlabel('Travel Time Residuals (s)')
+    ax.set_ylabel('Frequency')
+
+    title_str = f'Residuals {title} Removing\nWorst {percent:.4f} Percent'
+
+    if normalized is True:
+        title_str = 'Normalized ' + title_str
+
+    if period is not None:
+        title_str = title_str + f'\n{int(period)}s Period'
+
+    ax.set_title(title_str)
+
+    return fig, ax
+
+def plot_smoothing_damping(outputs_file: str,
+                           smoothing_list: list,
+                           damping_list: list,
+                           label_cells: bool=False):
+    """
+    Visually plots a matrix that shows the model RMS for different combinations
+    of smoothing and damping
+
+    Parameters
+    ----------
+    outputs_file : str
+        File containing the information outputted by runInversions in main.
+    smoothing_list : list
+        List of unique smoothing parameters that were used. NOT a list of every
+        smoothing value used (5 smoothing and 5 damping results in 25 combos,
+        give the list of 5, not 25)
+    damping_list : list
+        List of unique damping parameters that were used. NOT a list of every
+        damping value used (5 smoothing and 5 damping results in 25 combos,
+        give the list of 5, not 25)
+    label_cells : bool, optional
+        If True, will label the combination inside every cell. Illegible and bad
+        but I figured I would leave it just in case? The default is False.
+
+    Returns
+    -------
+    None.
+
+    """
+    cols = ['Smoothing','Damping','Lon_Grids','Lat_Grids','RMS','Variance']
+    df = pd.read_csv(outputs_file,names=cols,sep='\s+')
+
+    rms = np.array(df['RMS'].to_list())
+    print(rms)
+    rms_matrix = rms.reshape(len(smoothing_list),len(damping_list))
+
+    smoothing_labels = [str(x) for x in smoothing_list]
+    damping_labels = [str(x) for x in damping_list]
+
+    fig, ax = plt.subplots()
+    im = ax.imshow(rms_matrix,interpolation='none',cmap='viridis')
+
+    if label_cells:
+        for i in range(len(damping_labels)):
+            for j in range(len(smoothing_labels)):
+                ax.text(j,i,f'{smoothing_labels[j]},{damping_labels[i]}',ha='center',va='center',color='w')
+
+    ax.set_xticks(np.arange(len(smoothing_labels)))
+    ax.set_xticklabels(smoothing_labels)
+
+    ax.set_yticks(np.arange(len(damping_labels)))
+    ax.set_yticklabels(damping_labels)
+
+    ax.set_xlabel('Smoothing')
+    ax.set_ylabel('Damping')
+
+    cbar = ax.figure.colorbar(im,ax=ax)
+    cbar.ax.set_ylabel('Total Misfit (ms)',rotation=-90,va='bottom')
+
+    #plt.colorbar()
+    plt.show()
+
+    return fig
+
+def reset_FMST_directory(dataDirectory: str,
+                         fmstDirectory: str,
+                         ftanDirectory: str,
+                         component: str,
+                         period: int,
+                         projectCode: str,
+                         snr: float,
+                         min_wavelengths: float,
+                         damping: float,
+                         smoothing: float,
+                         lon_grids: int,
+                         lat_grids: int):
+    """Sets up a properly formatted FMST directory"""
+    tomoDirectory = getTomoDirectory(dataDirectory,component) + f'/{period}s'
+    fmstPath = setupFTANDirectory(FMSTDirectory=fmstDirectory,
+                                                period=period,
+                                                projectCode=projectCode,
+                                                component=component,
+                                                _overwrite=True)
+
+    moveFMSTInputs(fmstPath=fmstPath,
+                            tomoDirectory=tomoDirectory,
+                            _overwrite=False)
+
+    df = pd.read_csv(f'{ftanDirectory}/PhaseVelocities_SNR{snr}_WL{min_wavelengths}.csv')
+    avgPhvel = getAvgVelocity(period,df)
+    # Edit starting model velocity, edit colorbar
+    editBackgroundVel(fmstPath,avgPhvel,colorbar_margin=0.2)
+    edit_inversion_params(fmstPath,smoothing,damping,lon_grids,lat_grids)
+
+def haversine_distance(lat1: float, lon1: float,
+                       lat2: float, lon2: float) -> float:
+    """
+    Calculates the great circle distance between two points on the Earth
+    in kilometers.
+
+    Parameters
+    ----------
+    lat1 : float
+        Latitude of point 1.
+    lon1 : float
+        Longitude of point 1.
+    lat2 : float
+        Latitude of point 2.
+    lon2 : float
+        Longitude of point 2.
+
+    Returns
+    -------
+    distance : float
+        Distance in kilometers.
+
+    """
+
+    R = 6371 # Earth's radius in kilometers
+
+    # Convert decimal degrees to radians
+    lat1, lon1, lat2, lon2 = map(radians, [lat1, lon1, lat2, lon2])
+
+    dlat = lat2 - lat1
+    dlon = lon2 - lon1
+    a = sin(dlat/2)**2 + cos(lat1) * cos(lat2) * sin(dlon/2)**2
+    c = 2 * atan2(sqrt(a),sqrt(1-a))
+    distance = R * c
+
+    return distance
+
+def get_removed_paths(indices: list,
+                      ftanDir: str) -> list:
+    """
+    Parameters
+    ----------
+    indices : list
+        List of the indices for pairs that were thrown out.
+    ftanDir : str
+        FTAN home directory.
+
+    Returns
+    -------
+    pairs : list
+        List of lists, where each sublist is lat1,lon1,lat2,lon2.
+
+    """
+    distfile = f'{ftanDir}/distances.dat'
+    pairs = []
+    with open(distfile,'r') as dists:
+        for i, line in enumerate(dists.readlines()):
+            if i in indices:
+                val = line.split(' ')
+                lat1 = float(val[1])
+                lon1 = float(val[2])
+                lat2 = float(val[3])
+                lon2 = float(str(val[4])[:-2])
+                pairs.append([lat1,lon1,lat2,lon2])
+
+    return pairs
+
+
+>>>>>>> Stashed changes
