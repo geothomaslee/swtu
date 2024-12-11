@@ -26,6 +26,7 @@ import pickle
 import shutil
 from glob import glob
 from typing import List,Tuple,Union
+from math import cos, atan2, radians, sin, sqrt
 
 from tqdm import tqdm
 import numpy as np
@@ -34,6 +35,8 @@ from obspy.core.inventory import Inventory
 from obspy.clients.fdsn import Client
 import matplotlib.pyplot as plt
 from deprecated import deprecated
+import pandas as pd
+from pandas import DataFrame
 
 import swtUtils.ftan as ft #pylint: disable=import-error
 #pylint: disable=invalid-name
@@ -70,7 +73,8 @@ def getTomoDirectory(dataDirectory: str,component: str) -> str:
     if len(component) != 2:
         raise ValueError('Component must be 2 character string. Ex. "ZZ"')
 
-    return os.path.expanduser(dataDirectory + f'/Tomography/{component}')
+    tomoDirectory = f'{dataDirectory}/Tomography/{component}'
+    return tomoDirectory
 
 def getStationNames(filepath: str) -> Tuple[str, str]:
     """Pulls the name of the two stations from the name of the file"""
@@ -425,11 +429,11 @@ def makeFMSTInputs(stationDict,
     receiverFile = periodDirectory +'/receivers.dat'
     sourcesFile = periodDirectory +'/sources.dat'
     timesFile = periodDirectory + '/otimes.dat'
-<<<<<<< Updated upstream
-=======
+#<<<<<<< Updated upstream
+#=======
     ftanMainDirectory = os.path.dirname(FTANDirectory)
     distFile = ftanMainDirectory + '/distances.dat'
->>>>>>> Stashed changes
+#>>>>>>> Stashed changes
 
     # Creating issue dicts
     issue_dict = makeIssueDict()
@@ -522,8 +526,7 @@ def makeFMSTInputs(stationDict,
                 issue_dict['good'] += 1
                 outfile.write(f'1 {travelTime} 1.0\n')
 
-<<<<<<< Updated upstream
-=======
+
     if writeDists:
         with open(distFile, "w") as distances_file:
             for stat1 in stationList:
@@ -536,7 +539,7 @@ def makeFMSTInputs(stationDict,
                     dist_str = f'{dist:.3f} {lat1} {lon1} {lat2} {lon2}\n'
                     distances_file.write(dist_str)
 
->>>>>>> Stashed changes
+
     if detailedError is True:
         saveObj(issue_dict, f'{periodDirectory}/issueDict.pkl')
         saveObj(fpDict, f'{periodDirectory}/fpDict.pkl')
@@ -717,15 +720,17 @@ def setupFTANDirectory(FMSTDirectory,period,projectCode,component,_overwrite=Fal
 
     return fmstPath
 
-@deprecated(reason="Instead of using the avg velocity for all data, it's" +
-            "better to use the reference curve made in main using getReferenceVelocity")
-def getAvgVelocity(dataDirectory,period,component):
-    """Reads the previously pickled average velocity for that period"""
-    tomoDirectory = getTomoDirectory(dataDirectory,component) + f'/{period}s'
-    avgPhvel = loadObj(tomoDirectory + '/avgPhvel.pkl')
-    return avgPhvel
+def getAvgVelocity(period,df,component):
+    """Uses the phase velocity DataFrame to find the average velocity for that period"""
 
-def editBackgroundVel(fmstPath,avgPhvel):
+    vels = df[f'{float(period)}s'].to_list()
+    vels = [x for x in vels if str(x) != 'nan']
+
+    avgVel = np.mean(vels)
+
+    return avgVel
+
+def editBackgroundVel(fmstPath,avgPhvel,colorbar_margin: float=0.2):
     """
     Edits the background velocity in grid2dss.in, the initial grid creation
     input file for FMST, to match the average measured phase velocity from FTAN.
@@ -755,6 +760,23 @@ def editBackgroundVel(fmstPath,avgPhvel):
         for line in lines:
             outfile.write(line)
 
+    filepath = f'{fmstPath}/gmtplot/mapping.py'
+    print(filepath)
+
+    minvel = avgPhvel - (avgPhvel*colorbar_margin)
+    maxvel = avgPhvel + (avgPhvel*colorbar_margin)
+    with open(filepath, 'r') as infile:
+        lines = infile.readlines()
+        print(len(lines))
+        for i, line in enumerate(lines):
+            if line.strip() == 'plot_phase_vel_modern()':
+                newline = f'    plot_phase_vel_modern(minvel={minvel},maxvel={maxvel})'
+                lines[i] = newline
+
+    with open(filepath,"w",encoding='utf-8') as outfile:
+        for line in lines:
+            outfile.write(line)
+
 def moveFMSTInputs(fmstPath,tomoDirectory,_overwrite=False):
     """Moves FMST inputs to their corresponding FMST directory"""
     files = ['sources.dat','receivers.dat','otimes.dat']
@@ -779,8 +801,11 @@ def findAllFinalTomoImages(fmstPath,projectCode,component,periods):
         fullpath = f'{fmstPath}/{filename}'
         shutil.copyfile(src=fullpath,
                         dst=f'{imgdir}/phvel_{period}s.png')
+
+"""
 <<<<<<< Updated upstream
 =======
+"""
 
 def create_output_files(fmstDirectory: str,
                         periods: List[float]):
@@ -812,6 +837,7 @@ def get_output_info(fmstDir: str):
     with open (f'{fmstDir}/residuals.dat',encoding='utf-8') as infile:
         lines = infile.readlines()
         rms, variance = lines[-1].split('    ')
+        variance = variance.rstrip()
 
     return rms, variance
 
@@ -1090,7 +1116,7 @@ def plot_smoothing_damping(outputs_file: str,
     None.
 
     """
-    cols = ['Smoothing','Damping','Lon_Grids','Lat_Grids','RMS','Variance']
+    cols = ['Smoothing','Damping','Lon_Grids','Lat_Grids','RMS','Variance','Variability', 'Variance_KMS','Roughness']
     df = pd.read_csv(outputs_file,names=cols,sep='\s+')
 
     rms = np.array(df['RMS'].to_list())
@@ -1150,9 +1176,12 @@ def reset_FMST_directory(dataDirectory: str,
                             _overwrite=False)
 
     df = pd.read_csv(f'{ftanDirectory}/PhaseVelocities_SNR{snr}_WL{min_wavelengths}.csv')
-    avgPhvel = getAvgVelocity(period,df)
+
+    avgPhvel = getAvgVelocity(period,df,'ZZ')
+
     # Edit starting model velocity, edit colorbar
     editBackgroundVel(fmstPath,avgPhvel,colorbar_margin=0.2)
+    # I wrote the above function to adjust the colorbar too but I broke that shit because I'm dumb
     edit_inversion_params(fmstPath,smoothing,damping,lon_grids,lat_grids)
 
 def haversine_distance(lat1: float, lon1: float,
@@ -1222,5 +1251,112 @@ def get_removed_paths(indices: list,
 
     return pairs
 
+def read_velocity_grid(fmstPeriodDir: str,
+                       input_grid: bool=False):
+    """
+    Reads the velocity grid files from FMST. Can pull either a list of all the
+    velocities if input_grid is False, or the just the background velocity used
+    as the a priori model if input_grid is set True.
 
->>>>>>> Stashed changes
+    Parameters
+    ----------
+    fmstPeriodDir : str
+        Path to the FMST directory for the specific period of interest
+    input_grid : bool, optional
+        If True, returns the a priori background vel. If false, returns a list
+        of all model parameters (velocities). The default is False.
+
+    Returns
+    -------
+    float or list[float]
+        If input_grid is False, returns a list of all velocities in the grid.
+        If input_grid is True, returns the a priori background velocity.
+    """
+    vels = []
+
+    if input_grid is False:
+        velgrid = f'{fmstPeriodDir}/gridc.vtx'
+
+        with open(velgrid,'r',encoding='utf-8') as gridfile:
+            lines = gridfile.readlines()
+            for i, line in enumerate(lines):
+                if i < 3:
+                    continue
+                vel = float(line.strip())
+                vels.append(vel)
+
+        return vels
+
+    else:
+        velgrid = f'{fmstPeriodDir}/gridi.vtx'
+
+        with open(velgrid,'r',encoding='utf-8') as gridfile:
+            lines = gridfile.readlines()
+            for i, line in enumerate(lines):
+                if i != 4:
+                    continue
+                vel = float(line.split(' ')[2])
+                return vel
+
+def get_model_variability(fmstPeriodDir: str) -> float:
+    """
+    This function returns the variability of the model. Each model parameter is
+    the grid cell's percentage different from the a priori background velocity.
+    Ex. If the background velocity is 3 km/s, and the cell has a velocity of
+    3.3km/s, the percent would be 0.10. ALl of these model parameters are squared
+    and summed as a way of measuring how big the variations in the model are.
+
+    Parameters
+    ----------
+    fmstPeriodDir : str
+        Path to the FMST directory for the specific period of interest
+
+    Returns
+    -------
+    float
+        Variability of the model.
+
+    """
+    model_velocities = read_velocity_grid(fmstPeriodDir,input_grid=False)
+    background_vel = read_velocity_grid(fmstPeriodDir,input_grid=True)
+
+    percentages = [((x-background_vel)/background_vel) for x in model_velocities]
+
+    variability = 0
+    for percent in percentages:
+        variability += (percent**2)
+
+    return variability
+
+def plot_tradeoff_curve(outputs_file,var1='Damping',var2='Variability'):
+    cols = ['Smoothing','Damping','Lon_Grids','Lat_Grids','RMS','Variance','Variability', 'Variance_KMS','Roughness']
+    df = pd.read_csv(outputs_file,names=cols,sep='\s+')
+
+    var1_vals = df[var1].to_list()
+    var2_vals = df[var2].to_list()
+    print(var1_vals)
+    print(var2_vals)
+
+    fig, ax = plt.subplots()
+
+    ax.plot(var1_vals,var2_vals,'o-')
+
+    if var1 == 'RMS':
+        var1 = 'Residual (ms)'
+    if var2 == 'RMS':
+        var2 = 'Residual (ms)'
+
+    if var1 == 'Variance':
+        var1 = 'Variance ($s^2$)'
+    if var2 == 'Variance':
+        var2 = 'Variance ($s^2$)'
+
+    ax.set_xlabel(var1)
+    ax.set_ylabel(var2)
+
+    fig.show()
+
+
+
+
+

@@ -23,24 +23,27 @@ import time
 from math import ceil
 
 import matplotlib.pyplot as plt
+from scipy.stats import norm
 import numpy as np
 from glob import glob
 import pandas as pd
 from tqdm import tqdm
 
 #pylint: disable=import-error
-from swtUtils import ftan, fmstUtils
+from swtUtils import ftan, fmstUtils, mapping
 
 
 def main(
         foldTraces: bool=True,
         create_station_pairs_df: bool=True,
-        makeReferenceVelocities: bool=True,
         runFTAN: bool=True,
         makeFMSTInputs: bool=True,
         setupFMSTDirectory: bool=True,
         runInversion: bool=True,
-        runOnlyGMT: bool=False):
+        runOnlyGMT: bool=False,
+        plot_tradeoff_curves: bool=True,
+        plot_inversion_params=True,
+        collect_plots=False):
     """
     The main function of swtu. You should read each of the 6 input parameters
     as their own individual steps, and documentation is included progressively
@@ -75,7 +78,7 @@ def main(
     dataDirectory = '/Volumes/NewHDant/RainierAmbient2'
     ftanDirectory = '/Users/thomaslee/FTAN'
     fmstDirectory = '/Users/thomaslee/fmst_v1.1'
-<<<<<<< Updated upstream
+
     component='ZZ'
     projectCode='Rainier'
     periods = list(np.arange(1,16,1))
@@ -83,11 +86,11 @@ def main(
     channel='BH*,HH*,EH*'
     bound_box = [46.0796,47.8242,-122.8625,-120.25]
     check_specific_station_pair = True
-=======
+
     component='ZZ' # Component pair
     projectCode='Rainier' # Project code
     min_per = 5 # Minimum period
-    max_per = 6 # Maximum period
+    max_per = 5 # Maximum period
     dt = 1 # Spacing between period measurements
     whole_periods = np.arange(min_per,max_per+1,1) # Whole number periods, if dt is not 1
     periods = list(np.arange(min_per,max_per+dt,dt)) # Periods with a spacing of dt
@@ -97,8 +100,6 @@ def main(
     bound_box = [46.0796,47.8242,-122.8625,-120.25] # [min_lat,max_lat,min_lon,max_lon]
     snr = 5 # Signal to noise ratio. Can be list if testing multiple
     min_wavelengths = 2 # Minimum wavelength for measurements to be accepted. Can be list if testing multiple
-
->>>>>>> Stashed changes
 
     stationList = fmstUtils.getLocalStations(dataDirectory,'ZZ',forceOverwrite=False)
     print('Acquiring list of valid stations from IRIS...')
@@ -158,42 +159,9 @@ def main(
                                               'Station1_Lon','Station2',
                                               'Station2_Lat','Station2_Lon'])
 
-        period_columns = [f'velocity_period_{i}' for i in periods]
+        period_columns = [f'{i}s' for i in periods]
         for col in period_columns:
             df[col] = np.nan
-
-    if makeReferenceVelocities is True:
-        """
-        This creates a reference velocity curve that represents an average for
-        the entire region, and is also used as a starting velocity for every cell
-        in the tomographic region later on.
-        """
-        print('=======CREATING REFERENCE VELOCITY CURVE=======')
-        fmstUtils.makeTomoDirectory(dataDirectory,periods,component)
-        refMinSNR=6
-        refMinWavelengths=2
-        refPhvelDict = {}
-        refperiods = np.arange(0,20,0.2)
-        for period in refperiods:
-            refPhvelDict[period],phvels = fmstUtils.getReferenceVelocity(
-                                            stationDict=stationDict,
-                                            dataDirectory=dataDirectory,
-                                            FTANDirectory=f'{ftanDirectory}/Folded',
-                                            period=period,
-                                            component=component,
-                                            minSNR=refMinSNR,
-                                            minWavelengths=refMinWavelengths)
-            #fmstUtils.saveObj(phvels,f'{dataDirectory}/Tomography/{component}/{period}s_refPhvels.pkl')
-
-        fmstUtils.saveObj(refPhvelDict,f'{dataDirectory}/Tomography/{component}/refPhvelCurve.pkl')
-
-        refPhvelDict = fmstUtils.loadObj(f'{dataDirectory}/Tomography/{component}/refPhvelCurve.pkl')
-
-        plt.plot(list(refPhvelDict.keys()),list(refPhvelDict.values()))
-        plt.title(f'SNR {refMinSNR} at >{refMinWavelengths} wavelengths')
-        plt.xlabel('Period')
-        plt.ylabel('Phase Velocity (km/s)')
-        plt.show()
 
     if makeFMSTInputs is True:
         """
@@ -201,21 +169,10 @@ def main(
         later to set up a full FMST directory.
 
         """
-
         SNRs_To_Test = [5]
-
         plot_travel_times = True
 
-        for snr in SNRs_To_Test:
-
-<<<<<<< Updated upstream
-            fmstUtils.makeTomoDirectory(dataDirectory,periods,component)
-            for period in periods:
-                print(f'=====Working on FMST Outputs for {period}s...=====')
-=======
-        snr_list, _min_wavelengths = plotting._get_input_list(snr,min_wavelengths)
-
-        for _snr in snr_list:
+        for _snr in SNRs_To_Test:
             for i,period in enumerate(periods):
                 if i == 0:
                     writeDists=True
@@ -233,16 +190,6 @@ def main(
                                         minWavelengths=min_wavelengths,
                                         writeDists=writeDists,
                                         detailedError=True)
->>>>>>> Stashed changes
-
-                phvels, dists, stat1_list,stat2_list = fmstUtils.makeFMSTInputs(stationDict=stationDict,
-                                                  dataDirectory=dataDirectory,
-                                                  FTANDirectory=f'{ftanDirectory}/Folded',
-                                                  period=period,
-                                                  component=component,
-                                                  minSNR=3,
-                                                  minWavelengths=1.5,
-                                                  detailedError=True)
 
                 for i, phvel in enumerate(phvels):
                     stat1 = stat1_list[i]
@@ -252,7 +199,7 @@ def main(
                            ((df['Station1'] == stat2) & (df['Station1'] == stat1))
 
                     if mask.any():
-                        df.loc[mask,f'velocity_period_{period}'] = phvel
+                        df.loc[mask,f'{period}s'] = phvel
 
                 fmstUtils.saveObj(phvels,f'{dataDirectory}/Tomography/{component}/{period}s_allPhvel.pkl')
 
@@ -288,7 +235,7 @@ def main(
                 print(' ')
 
         df.round(4)
-        df.to_csv('PhaseVelocities_SNR5_WL1.5.csv')
+        df.to_csv(f'{ftanDirectory}/PhaseVelocities_SNR{snr}_WL{min_wavelengths}.csv')
 
     if check_specific_station_pair is True:
 
@@ -299,16 +246,6 @@ def main(
         mask = ((df['Station1'] == stat1) & (df['Station2'] == stat2)) | \
                ((df['Station1'] == stat2) & (df['Station1'] == stat1))
 
-        if mask.any():
-            print(df[mask])
-        else:
-            print('NOT FOUND')
-
-<<<<<<< Updated upstream
-
-
-    if setupFMSTDirectory is True:
-=======
     """
     damping_list = [4.8,4.9,5.0,5.1,5.2]
     smoothing_list = [0.5,0.75,1.0,1.25,1.5]
@@ -438,12 +375,22 @@ def main(
                     std_residuals = fmstUtils.get_residual_statistics(residuals_df)
                     print(f'Two-step inversion took {(time.perf_counter() - inversion_start):.4f} seconds')
 
+                    # Run misfitss to get the variance and roughness
+                    result = subprocess.run('misfitss',cwd=fmstPeriodDir,check=False,capture_output=True,text=True)
+                    output_lines = result.stdout.splitlines()
+                    assert len(output_lines) == 2, f'Expected 2 lines, got {len(output_lines)}'
+                    print('MISFITSSSS TEST OUTPUT')
+                    variance_kms = float(output_lines[0].split(' ')[-1])
+                    roughness = float(output_lines[1].split(' ')[-1])
+                    print('==========================')
+
                     # Write inversion statistics to output file
                     rms2, var2 = fmstUtils.get_output_info(fmstPeriodDir)
                     print(f'Model RMS: {rms2} Variance: {var2}')
                     print(f'RMS Reduction after Removing Worst: {(float(rms1)-float(rms2)):.4f}')
                     print(f'Variance Reduction After Removing Worst: {(float(var1)-float(var2)):.4f}')
-                    write_str = f'{float(smoothing)} {float(damping)} {lon_grids} {lat_grids} {rms2} {var2}'
+                    variability = fmstUtils.get_model_variability(fmstPeriodDir)
+                    write_str = f'{float(smoothing)} {float(damping)} {lon_grids} {lat_grids} {rms2} {var2} {variability} {variance_kms} {roughness}\n'
 
                     with open (f'{fmstDirectory}/{period}s_Outputs','a') as outfile:
                         outfile.write(write_str)
@@ -456,6 +403,12 @@ def main(
                                    cwd=gmtplotDir,
                                    check=True)
 
+    if plot_tradeoff_curves is True:
+        period = 5.0
+        outputs_file = f'{fmstDirectory}/{period}s_Outputs'
+
+        fmstUtils.plot_tradeoff_curve(outputs_file,var1='Variance',var2='RMS')
+
     if plot_inversion_params is True:
         fmstPeriodDir = f'{fmstDirectory}/{projectCode}_5.0s_{component}'
         im = fmstUtils.plot_smoothing_damping(f'{fmstDirectory}/5.0s_Outputs',smoothing_list,damping_list)
@@ -463,7 +416,7 @@ def main(
         #rtravel_df, otimes_df, residuals_df = fmstUtils.make_residuals_dfs(fmstPeriodDir)
 
     if collect_plots is True:
->>>>>>> Stashed changes
+
         """
         This uses the previously created travel time inputs as well as a "master"
         FMST folder that contains files used for the inversion for every period,
@@ -478,7 +431,6 @@ def main(
                                                     component=component,
                                                     _overwrite=True)
 
-<<<<<<< Updated upstream
             fmstUtils.moveFMSTInputs(fmstPath=fmstPath,
                                      tomoDirectory=tomoDirectory,
                                      _overwrite=False)
@@ -486,59 +438,22 @@ def main(
             avgPhvel = fmstUtils.getAvgVelocity(dataDirectory,period,component)
             fmstUtils.editBackgroundVel(fmstPath,avgPhvel)
 
-    if runInversion is True:
-        """
-        This runs the inversions!
-        """
-        for i,period in enumerate(periods):
-            fmstDir = f'{fmstDirectory}/{projectCode}_{period}s_{component}'
-            if runOnlyGMT is False:
-                print(f'=====PERFORMING INVERSION FOR {period}s...======')
-                inversion_start = time.perf_counter()
-                mkmodelDir = fmstDir + '/mkmodel'
-                subprocess.run('grid2dss',cwd=mkmodelDir,shell=True,check=False)
-                shutil.copy(f'{mkmodelDir}/grid2d.vtx',f'{fmstDir}/gridi.vtx')
-
-                subprocess.run('ttomoss',cwd=fmstDir,check=False)
-
-                print(f'Inversion took {time.perf_counter() - inversion_start} seconds')
-
-            if runOnlyGMT is True:
-                if i == 0:
-                    print('=====REBUILDING PHASE VELOCITY MAPS WITH MASTER GMT TEMPLATE======')
-                print(f'Making map for {period}s...')
-                shutil.copy(src=f'{fmstDirectory}/{projectCode}_Master/gmtplot/plotgmt6',
-                            dst=f'{fmstDir}/gmtplot')
-
-            gmtplotDir = fmstDir + '/gmtplot'
-            subprocess.run('tslicess',cwd=gmtplotDir,check=False)
-            subprocess.run(['chmod','+x', './plotgmt6'],cwd=gmtplotDir,check=False)
-            subprocess.call(f'{gmtplotDir}/plotgmt6',cwd=gmtplotDir)
-
     """
     fmstUtils.findAllFinalTomoImages(fmstPath=fmstDirectory,
                                      projectCode=projectCode,
                                      component=component,
                                      periods=periods)
     """
-=======
->>>>>>> Stashed changes
 
 if __name__ == '__main__':
-    main(foldTraces=True,
-         create_station_pairs_df=True,
+    main(foldTraces=False,
          runFTAN=False,
-         makeReferenceVelocities=False,
+         create_station_pairs_df=False,
          makeFMSTInputs=False,
-<<<<<<< Updated upstream
-         setupFMSTDirectory=False,
-         runInversion=False,
-         runOnlyGMT=False)
-=======
-         plot_phase_velocity_curves=False,
          setupFMSTDirectory=True,
          runInversion=True,
          runOnlyGMT=False,
-         plot_inversion_params=True,
+         plot_tradeoff_curves=False,
+         plot_inversion_params=False,
          collect_plots=False)
->>>>>>> Stashed changes
+
