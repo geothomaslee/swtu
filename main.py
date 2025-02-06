@@ -254,8 +254,8 @@ def main(
     damping_list = [5]
     smoothing_list = [0.5]
 
-    lon_grids = 20
-    lat_grids = 20
+    lon_grids = 15
+    lat_grids = 10
     plot_histograms = False
     stds = 2 # If the residual is this many standard deviations away, the
     # corresponding observed travel time won't be used in the 2nd inversion step
@@ -380,20 +380,24 @@ def main(
                     output_lines = result.stdout.splitlines()
                     assert len(output_lines) == 2, f'Expected 2 lines, got {len(output_lines)}'
                     print('MISFITSSSS TEST OUTPUT')
-                    variance_kms = float(output_lines[0].split(' ')[-1])
-                    roughness = float(output_lines[1].split(' ')[-1])
-                    print('==========================')
+                    try:
+                        variance_kms = float(output_lines[0].split(' ')[-1])
+                        roughness = float(output_lines[1].split(' ')[-1])
+                        print('==========================')
 
-                    # Write inversion statistics to output file
-                    rms2, var2 = fmstUtils.get_output_info(fmstPeriodDir)
-                    print(f'Model RMS: {rms2} Variance: {var2}')
-                    print(f'RMS Reduction after Removing Worst: {(float(rms1)-float(rms2)):.4f}')
-                    print(f'Variance Reduction After Removing Worst: {(float(var1)-float(var2)):.4f}')
-                    variability = fmstUtils.get_model_variability(fmstPeriodDir)
-                    write_str = f'{float(smoothing)} {float(damping)} {lon_grids} {lat_grids} {rms2} {var2} {variability} {variance_kms} {roughness}\n'
+                        # Write inversion statistics to output file
+                        rms2, var2 = fmstUtils.get_output_info(fmstPeriodDir)
+                        print(f'Model RMS: {rms2} Variance: {var2}')
+                        print(f'RMS Reduction after Removing Worst: {(float(rms1)-float(rms2)):.4f}')
+                        print(f'Variance Reduction After Removing Worst: {(float(var1)-float(var2)):.4f}')
+                        variability = fmstUtils.get_model_variability(fmstPeriodDir)
+                        write_str = f'{float(smoothing)} {float(damping)} {lon_grids} {lat_grids} {rms2} {var2} {variability} {variance_kms} {roughness}\n'
 
-                    with open (f'{fmstDirectory}/{period}s_Outputs','a') as outfile:
-                        outfile.write(write_str)
+                        with open (f'{fmstDirectory}/{period}s_Outputs','a') as outfile:
+                            outfile.write(write_str)
+
+                    except:
+                        pass
 
                     # Plot the final results
                     gmtplotDir = fmstPeriodDir + '/gmtplot'

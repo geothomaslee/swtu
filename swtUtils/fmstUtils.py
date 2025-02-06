@@ -1162,7 +1162,8 @@ def reset_FMST_directory(dataDirectory: str,
                          damping: float,
                          smoothing: float,
                          lon_grids: int,
-                         lat_grids: int):
+                         lat_grids: int,
+                         colorbar_margin: float=0.2):
     """Sets up a properly formatted FMST directory"""
     tomoDirectory = getTomoDirectory(dataDirectory,component) + f'/{period}s'
     fmstPath = setupFTANDirectory(FMSTDirectory=fmstDirectory,
@@ -1180,7 +1181,7 @@ def reset_FMST_directory(dataDirectory: str,
     avgPhvel = getAvgVelocity(period,df,'ZZ')
 
     # Edit starting model velocity, edit colorbar
-    editBackgroundVel(fmstPath,avgPhvel,colorbar_margin=0.2)
+    editBackgroundVel(fmstPath,avgPhvel,colorbar_margin=colorbar_margin)
     # I wrote the above function to adjust the colorbar too but I broke that shit because I'm dumb
     edit_inversion_params(fmstPath,smoothing,damping,lon_grids,lat_grids)
 
