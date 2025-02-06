@@ -260,6 +260,8 @@ def main(
     stds = 2 # If the residual is this many standard deviations away, the
     # corresponding observed travel time won't be used in the 2nd inversion step
 
+    colorbar_margin=0.4
+
     percent_removed = (1 - (norm.cdf(stds) - norm.cdf(-1*stds)))*100
 
     if setupFMSTDirectory is True:
@@ -350,7 +352,8 @@ def main(
                                                    damping=damping,
                                                    smoothing=smoothing,
                                                    lon_grids=lon_grids,
-                                                   lat_grids=lat_grids)
+                                                   lat_grids=lat_grids,
+                                                   colorbar_margin=colorbar_margin)
 
                     fmstUtils.rewrite_otimes(fmstPeriodDir,otimes_df)
 
