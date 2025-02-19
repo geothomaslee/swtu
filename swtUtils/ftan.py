@@ -70,7 +70,7 @@ def getSACDict(tr: Trace) -> dict:
 
     return sacDict
 
-def foldTrace(tr: Trace) -> Trace:
+def foldTrace(tr: Trace,delta=0.2) -> Trace:
     """Returns a folded version of the trace"""
     if (tr.stats.npts %2) != 1:
         raise ValueError('Trace must have an odd number of points')
@@ -86,8 +86,7 @@ def foldTrace(tr: Trace) -> Trace:
     new_tr.data = data
 
     new_tr.stats.sac = getSACDict(tr)
-    new_tr.stats.sampling_rate = 1/(getSACDict(tr)['delta'])
-    new_tr.stats.delta = getSACDict(tr)['delta']
+    new_tr.stats.delta = delta
 
     return new_tr
 
@@ -97,6 +96,9 @@ def foldAllTraces(dataDirectory: str,component: str):
     componentDirectory = getComponentDirectory(dataDirectory,component)
 
     fileList = getSACFileList(componentDirectory)
+
+    print('WARNING: Must manually define delta in foldTrace. This was the only ' +
+          'workaround I could find for a really annoying floating point error')
 
     for file in tqdm(fileList):
         basename= os.path.basename(file)[0:-4]

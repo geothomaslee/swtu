@@ -56,10 +56,7 @@ for period in periods:
     from swtUtils.ftan import foldTrace
 
     folded_tr = foldTrace(tr)
-    print(tr.stats)
-    print(folded_tr.stats)
-
-    print(folded_tr.stats.sampling_rate)
+    folded_tr.plot()
 
 
     tr.filter('bandpass',freqmin=1/(period+pulse_width),freqmax=1/(period-pulse_width))

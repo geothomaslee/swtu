@@ -462,12 +462,12 @@ def main(
     """
 
 if __name__ == '__main__':
-    main(foldTraces=False,
+    main(foldTraces=True,
          runFTAN=False,
          create_station_pairs_df=False,
          makeFMSTInputs=False,
-         setupFMSTDirectory=True,
-         runCheckerboardTests=True,
+         setupFMSTDirectory=False,
+         runCheckerboardTests=False,
          runInversion=False,
          runOnlyGMT=False,
          plot_tradeoff_curves=False,
