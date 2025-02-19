@@ -722,8 +722,12 @@ def setupFTANDirectory(FMSTDirectory,period,projectCode,component,_overwrite=Fal
 
 def getAvgVelocity(period,df,component):
     """Uses the phase velocity DataFrame to find the average velocity for that period"""
+    try:
+        vels = df[f'{float(period)}s'].to_list()
+    except KeyError:
+        print('Key error. Almost certainly moves this period is not in the CSV')
+        return 'no_key_in_csv'
 
-    vels = df[f'{float(period)}s'].to_list()
     vels = [x for x in vels if str(x) != 'nan']
 
     avgVel = np.mean(vels)
@@ -1329,33 +1333,27 @@ def get_model_variability(fmstPeriodDir: str) -> float:
 
     return variability
 
-def plot_tradeoff_curve(outputs_file,var1='Damping',var2='Variability'):
+def plot_tradeoff_curve(outputs_file):
     cols = ['Smoothing','Damping','Lon_Grids','Lat_Grids','RMS','Variance','Variability', 'Variance_KMS','Roughness']
     df = pd.read_csv(outputs_file,names=cols,sep='\s+')
 
-    var1_vals = df[var1].to_list()
-    var2_vals = df[var2].to_list()
-    print(var1_vals)
-    print(var2_vals)
+    variance = df['Variance'].to_list()
+    misfit = df['RMS'].to_list()
+    damping = df['Damping'].to_list()
+
+    norm_variance = [x / max(variance) for x in variance]
+    norm_misfit = [x / max(misfit) for x in misfit]
 
     fig, ax = plt.subplots()
+    ax.plot(norm_variance,norm_misfit,'o')
+    ax.set_xlabel('Normalized Variance')
+    ax.set_ylabel('Normalized Misfit')
+    ax.set_title('Misfit vs. Variance, Damping')
 
-    ax.plot(var1_vals,var2_vals,'o-')
+    plt.show()
 
-    if var1 == 'RMS':
-        var1 = 'Residual (ms)'
-    if var2 == 'RMS':
-        var2 = 'Residual (ms)'
 
-    if var1 == 'Variance':
-        var1 = 'Variance ($s^2$)'
-    if var2 == 'Variance':
-        var2 = 'Variance ($s^2$)'
 
-    ax.set_xlabel(var1)
-    ax.set_ylabel(var2)
-
-    fig.show()
 
 
 

@@ -86,6 +86,8 @@ def foldTrace(tr: Trace) -> Trace:
     new_tr.data = data
 
     new_tr.stats.sac = getSACDict(tr)
+    new_tr.stats.sampling_rate = 1/(getSACDict(tr)['delta'])
+    new_tr.stats.delta = getSACDict(tr)['delta']
 
     return new_tr
 

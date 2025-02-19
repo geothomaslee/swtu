@@ -39,6 +39,7 @@ def main(
         runFTAN: bool=True,
         makeFMSTInputs: bool=True,
         setupFMSTDirectory: bool=True,
+        runCheckerboardTests: bool=True,
         runInversion: bool=True,
         runOnlyGMT: bool=False,
         plot_tradeoff_curves: bool=True,
@@ -90,7 +91,7 @@ def main(
     component='ZZ' # Component pair
     projectCode='Rainier' # Project code
     min_per = 5 # Minimum period
-    max_per = 5 # Maximum period
+    max_per = 8 # Maximum period
     dt = 1 # Spacing between period measurements
     whole_periods = np.arange(min_per,max_per+1,1) # Whole number periods, if dt is not 1
     periods = list(np.arange(min_per,max_per+dt,dt)) # Periods with a spacing of dt
@@ -105,6 +106,9 @@ def main(
     print('Acquiring list of valid stations from IRIS...')
     stationDict = fmstUtils.getValidStations(network,bound_box,channel,stationList)
     print('Stations acquired')
+
+    if makeFMSTInputs is True:
+        create_station_pairs_df = True
 
     if foldTraces is True:
         """
@@ -246,16 +250,12 @@ def main(
         mask = ((df['Station1'] == stat1) & (df['Station2'] == stat2)) | \
                ((df['Station1'] == stat2) & (df['Station1'] == stat1))
 
-    """
-    damping_list = [4.8,4.9,5.0,5.1,5.2]
-    smoothing_list = [0.5,0.75,1.0,1.25,1.5]
-    """
-
-    damping_list = [5]
+    damping_list = [20]
     smoothing_list = [0.5]
 
-    lon_grids = 15
-    lat_grids = 10
+
+    lon_grids = 12
+    lat_grids = 8
     plot_histograms = False
     stds = 2 # If the residual is this many standard deviations away, the
     # corresponding observed travel time won't be used in the 2nd inversion step
@@ -266,6 +266,9 @@ def main(
 
     if setupFMSTDirectory is True:
         fmstUtils.create_output_files(fmstDirectory,periods)
+
+    if runCheckerboardTests is True:
+        pass
 
     for damping in damping_list:
         for smoothing in smoothing_list:
@@ -295,7 +298,9 @@ def main(
                 This runs the inversions! See FMST documentation for more.
                 """
                 for i,period in enumerate(periods):
+
                     fmstPeriodDir = f'{fmstDirectory}/{projectCode}_{period}s_{component}'
+                    #fmstPeriodDir='/Users/thomaslee/fmst_v1.1/5.0_CheckerboardTest'
                     print(f'==========PERFORMING INVERSION FOR {period}s...===========')
                     print('Running first inversion pass...     ')
                     inversion_start = time.perf_counter()
@@ -307,100 +312,104 @@ def main(
                     gmtplotDir = fmstPeriodDir + '/gmtplot'
                     subprocess.run('tslicess',cwd=gmtplotDir,check=False)
 
-                    print('Removing worst fitting measurements     ')
-                    # Calculate residuals and pull them into a DataFrame
-                    rtravel_df, otimes_df, residuals_df = fmstUtils.make_residuals_dfs(ftanDir=ftanDirectory,
-                                                                                       fmstDir=fmstPeriodDir)
-                    if plot_histograms:
-                        fig, ax = fmstUtils.plot_residuals(residuals_df=residuals_df,
-                                                           title='Before',
-                                                           percent=percent_removed,
-                                                           period=period)
-                        plt.show()
+                    rerun_inversion = False
 
-                    # Calculate the standard deviation of residuals
-                    std_residuals = fmstUtils.get_residual_statistics(residuals_df)
+                    if rerun_inversion:
 
+                        print('Removing worst fitting measurements     ')
+                        # Calculate residuals and pull them into a DataFrame
+                        rtravel_df, otimes_df, residuals_df = fmstUtils.make_residuals_dfs(ftanDir=ftanDirectory,
+                                                                                           fmstDir=fmstPeriodDir)
+                        if plot_histograms:
+                            fig, ax = fmstUtils.plot_residuals(residuals_df=residuals_df,
+                                                               title='Before',
+                                                               percent=percent_removed,
+                                                               period=period)
+                            plt.show()
 
-                    rms1, var1 = fmstUtils.get_output_info(fmstPeriodDir)
-                    print(f'Model RMS: {rms1} Variance: {var1}')
-
-                    # Remove the worst ones and return a new otimes DataFrame
-                    otimes_df, indices = fmstUtils.remove_worst_fits(otimes_df,
-                                                            residuals_df,
-                                                            std_residuals,
-                                                            stds=stds)
-
-                    raypaths = fmstUtils.get_removed_paths(indices,ftanDirectory)
-
-                    fig = mapping.plot_removed_ray_paths(fmstPeriodDir=fmstPeriodDir,
-                                                         raypaths=raypaths,
-                                                         period=period)
-                    fig.show()
-
-                    print('Worst fitting measurements removed...')
-
-                    print('Resetting FMST directory...')
-                    fmstUtils.reset_FMST_directory(dataDirectory=dataDirectory,
-                                                   fmstDirectory=fmstDirectory,
-                                                   ftanDirectory=ftanDirectory,
-                                                   component=component,
-                                                   period=period,
-                                                   projectCode=projectCode,
-                                                   snr=snr,
-                                                   min_wavelengths=min_wavelengths,
-                                                   damping=damping,
-                                                   smoothing=smoothing,
-                                                   lon_grids=lon_grids,
-                                                   lat_grids=lat_grids,
-                                                   colorbar_margin=colorbar_margin)
-
-                    fmstUtils.rewrite_otimes(fmstPeriodDir,otimes_df)
-
-                    print('Re-running inversion....      ')
-                    print('==================================================')
-                    subprocess.run('grid2dss',cwd=mkmodelDir,shell=True,check=False)
-                    shutil.copy(f'{mkmodelDir}/grid2d.vtx',f'{fmstPeriodDir}/gridi.vtx')
-                    subprocess.run('ttomoss',cwd=fmstPeriodDir,check=False)
+                        # Calculate the standard deviation of residuals
+                        std_residuals = fmstUtils.get_residual_statistics(residuals_df)
 
 
-                    # Re-create dataframes
-                    rtravel_df, otimes_df, residuals_df = fmstUtils.make_residuals_dfs(ftanDir=ftanDirectory,
-                                                                                       fmstDir=fmstPeriodDir)
-                    if plot_histograms:
-                        fig, ax = fmstUtils.plot_residuals(residuals_df=residuals_df,
-                                                           title='After',
-                                                           percent=percent_removed,
-                                                           period=period)
-                        plt.show()
+                        rms1, var1 = fmstUtils.get_output_info(fmstPeriodDir)
+                        print(f'Model RMS: {rms1} Variance: {var1}')
 
-                    # Calculate the standard deviation of residuals
-                    std_residuals = fmstUtils.get_residual_statistics(residuals_df)
-                    print(f'Two-step inversion took {(time.perf_counter() - inversion_start):.4f} seconds')
+                        # Remove the worst ones and return a new otimes DataFrame
+                        otimes_df, indices = fmstUtils.remove_worst_fits(otimes_df,
+                                                                residuals_df,
+                                                                std_residuals,
+                                                                stds=stds)
 
-                    # Run misfitss to get the variance and roughness
-                    result = subprocess.run('misfitss',cwd=fmstPeriodDir,check=False,capture_output=True,text=True)
-                    output_lines = result.stdout.splitlines()
-                    assert len(output_lines) == 2, f'Expected 2 lines, got {len(output_lines)}'
-                    print('MISFITSSSS TEST OUTPUT')
-                    try:
-                        variance_kms = float(output_lines[0].split(' ')[-1])
-                        roughness = float(output_lines[1].split(' ')[-1])
-                        print('==========================')
+                        raypaths = fmstUtils.get_removed_paths(indices,ftanDirectory)
 
-                        # Write inversion statistics to output file
-                        rms2, var2 = fmstUtils.get_output_info(fmstPeriodDir)
-                        print(f'Model RMS: {rms2} Variance: {var2}')
-                        print(f'RMS Reduction after Removing Worst: {(float(rms1)-float(rms2)):.4f}')
-                        print(f'Variance Reduction After Removing Worst: {(float(var1)-float(var2)):.4f}')
-                        variability = fmstUtils.get_model_variability(fmstPeriodDir)
-                        write_str = f'{float(smoothing)} {float(damping)} {lon_grids} {lat_grids} {rms2} {var2} {variability} {variance_kms} {roughness}\n'
+                        fig = mapping.plot_removed_ray_paths(fmstPeriodDir=fmstPeriodDir,
+                                                             raypaths=raypaths,
+                                                             period=period)
+                        fig.show()
 
-                        with open (f'{fmstDirectory}/{period}s_Outputs','a') as outfile:
-                            outfile.write(write_str)
+                        print('Worst fitting measurements removed...')
 
-                    except:
-                        pass
+                        print('Resetting FMST directory...')
+                        fmstUtils.reset_FMST_directory(dataDirectory=dataDirectory,
+                                                       fmstDirectory=fmstDirectory,
+                                                       ftanDirectory=ftanDirectory,
+                                                       component=component,
+                                                       period=period,
+                                                       projectCode=projectCode,
+                                                       snr=snr,
+                                                       min_wavelengths=min_wavelengths,
+                                                       damping=damping,
+                                                       smoothing=smoothing,
+                                                       lon_grids=lon_grids,
+                                                       lat_grids=lat_grids,
+                                                       colorbar_margin=colorbar_margin)
+
+                        fmstUtils.rewrite_otimes(fmstPeriodDir,otimes_df)
+
+                        print('Re-running inversion....      ')
+                        print('==================================================')
+                        subprocess.run('grid2dss',cwd=mkmodelDir,shell=True,check=False)
+                        shutil.copy(f'{mkmodelDir}/grid2d.vtx',f'{fmstPeriodDir}/gridi.vtx')
+                        subprocess.run('ttomoss',cwd=fmstPeriodDir,check=False)
+
+
+                        # Re-create dataframes
+                        rtravel_df, otimes_df, residuals_df = fmstUtils.make_residuals_dfs(ftanDir=ftanDirectory,
+                                                                                           fmstDir=fmstPeriodDir)
+                        if plot_histograms:
+                            fig, ax = fmstUtils.plot_residuals(residuals_df=residuals_df,
+                                                               title='After',
+                                                               percent=percent_removed,
+                                                               period=period)
+                            plt.show()
+
+                        # Calculate the standard deviation of residuals
+                        std_residuals = fmstUtils.get_residual_statistics(residuals_df)
+                        print(f'Two-step inversion took {(time.perf_counter() - inversion_start):.4f} seconds')
+
+                        # Run misfitss to get the variance and roughness
+                        result = subprocess.run('misfitss',cwd=fmstPeriodDir,check=False,capture_output=True,text=True)
+                        output_lines = result.stdout.splitlines()
+                        assert len(output_lines) == 2, f'Expected 2 lines, got {len(output_lines)}'
+                        print('MISFITSSSS TEST OUTPUT')
+                        try:
+                            variance_kms = float(output_lines[0].split(' ')[-1])
+                            roughness = float(output_lines[1].split(' ')[-1])
+                            print('==========================')
+
+                            # Write inversion statistics to output file
+                            rms2, var2 = fmstUtils.get_output_info(fmstPeriodDir)
+                            print(f'Model RMS: {rms2} Variance: {var2}')
+                            print(f'RMS Reduction after Removing Worst: {(float(rms1)-float(rms2)):.4f}')
+                            print(f'Variance Reduction After Removing Worst: {(float(var1)-float(var2)):.4f}')
+                            variability = fmstUtils.get_model_variability(fmstPeriodDir)
+                            write_str = f'{float(smoothing)} {float(damping)} {lon_grids} {lat_grids} {rms2} {var2} {variability} {variance_kms} {roughness}\n'
+
+                            with open (f'{fmstDirectory}/{period}s_Outputs','a') as outfile:
+                                outfile.write(write_str)
+
+                        except:
+                            pass
 
                     # Plot the final results
                     gmtplotDir = fmstPeriodDir + '/gmtplot'
@@ -414,7 +423,7 @@ def main(
         period = 5.0
         outputs_file = f'{fmstDirectory}/{period}s_Outputs'
 
-        fmstUtils.plot_tradeoff_curve(outputs_file,var1='Variance',var2='RMS')
+        fmstUtils.plot_tradeoff_curve(outputs_file)
 
     if plot_inversion_params is True:
         fmstPeriodDir = f'{fmstDirectory}/{projectCode}_5.0s_{component}'
@@ -458,7 +467,8 @@ if __name__ == '__main__':
          create_station_pairs_df=False,
          makeFMSTInputs=False,
          setupFMSTDirectory=True,
-         runInversion=True,
+         runCheckerboardTests=True,
+         runInversion=False,
          runOnlyGMT=False,
          plot_tradeoff_curves=False,
          plot_inversion_params=False,
