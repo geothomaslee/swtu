@@ -119,7 +119,8 @@ def getValidStations(
         network : str,
         bounds : Tuple[float,float,float,float],
         channel : str,
-        stationList : List[str]) -> dict:
+        stationList : List[str],
+        client: str='IRIS') -> dict:
     """
     Cross-references our list of stations that we have data for in the
     cross-correlation folder with a search of stations in the IRIS database,
@@ -142,8 +143,8 @@ def getValidStations(
         {network.station : (lat,lon).
 
     """
-    client = Client("IRIS")
-    inventory = client.get_stations(network = network,
+    _client = Client(client)
+    inventory = _client.get_stations(network = network,
                                     station = '*',
                                     channel = channel,
                                     minlatitude = bounds[0],
@@ -207,7 +208,7 @@ def makeTomoDirectory(
     return tomoDirectory
 
 def get_all_ftan_outputs(FTANDirectory: str) -> list:
-    all_ftan_outputs = glob(f'{FTANDirectory}/*_2_DISP.1')
+    all_ftan_outputs = glob(f'{FTANDirectory}/*_1_DISP.1')
     return set(all_ftan_outputs)
 
 def getReferenceVelocity(
@@ -334,7 +335,8 @@ def makeFMSTInputs(stationDict,
                    minSNR,
                    minWavelengths,
                    writeDists=True,
-                   detailedError=True):
+                   detailedError=True,
+                   included_networks=None):
     """
     =====OUTPUT FILE INFO======
     Will makes the 3 input files needed by FMST - sources.dat,receivers.dat,
@@ -420,6 +422,16 @@ def makeFMSTInputs(stationDict,
         List of every measured phase velocity, generally used for plotting
         a histogram to see if your measurements are generally correct.
     """
+
+    if included_networks is not None:
+        print('WARNING: included networks is defined, meaning certain networks may be excluded. Set to None to use all')
+        if isinstance(included_networks,list) != True:
+            raise TypeError('included_networks must be a list of strings, where each string is a station')
+        else:
+            for _net_ in included_networks:
+                if isinstance(_net_, str) != True:
+                    raise TypeError('included_networks must be a list of strings, where each string is a station')
+
     # Get directories
     tomoDirectory = getTomoDirectory(dataDirectory,component)
     periodDirectory = tomoDirectory + f'/{period}s'
@@ -429,11 +441,9 @@ def makeFMSTInputs(stationDict,
     receiverFile = periodDirectory +'/receivers.dat'
     sourcesFile = periodDirectory +'/sources.dat'
     timesFile = periodDirectory + '/otimes.dat'
-#<<<<<<< Updated upstream
-#=======
+
     ftanMainDirectory = os.path.dirname(FTANDirectory)
     distFile = ftanMainDirectory + '/distances.dat'
-#>>>>>>> Stashed changes
 
     # Creating issue dicts
     issue_dict = makeIssueDict()
@@ -466,6 +476,7 @@ def makeFMSTInputs(stationDict,
     dists = []
     stat1_list = []
     stat2_list = []
+
     with open(timesFile, 'a',encoding='utf-8') as outfile:
         #outfile.write(f'{len(stationList)**2}\n')
         for stat1 in tqdm(stationList):
@@ -476,6 +487,15 @@ def makeFMSTInputs(stationDict,
                     continue
 
                 filepath = checkIfFTANExists(stat1,stat2,FTANDirectory,ftan_output_list)
+
+                if included_networks is not None:
+                    if stat1.split('.')[0] not in included_networks:
+                        outfile.write('0 0.0000 1.0\n')
+                        continue
+
+                    if stat2.split('.')[0] not in included_networks:
+                        outfile.write('0 0.0000 1.0\n')
+                        continue
 
                 if filepath is None:
                     issue_dict['filepath not exist'] += 1
@@ -614,11 +634,11 @@ def _interpPeriodErrorHandler(interpPeriodOut,interpPeriodDict):
 
 def checkIfFTANExists(stat1,stat2,FTANDirectory,ftan_output_list):
     """Checks if an FTAN output from AFTAN (Bensen) exists"""
-    if f'{FTANDirectory}/{stat1}_{stat2}_Folded.sac_2_DISP.1' in ftan_output_list:
-        return FTANDirectory + f'/{stat1}_{stat2}_Folded.sac_2_DISP.1'
+    if f'{FTANDirectory}/{stat1}_{stat2}_Folded.sac_1_DISP.1' in ftan_output_list:
+        return FTANDirectory + f'/{stat1}_{stat2}_Folded.sac_1_DISP.1'
 
-    if f'{FTANDirectory}/{stat2}_{stat1}_Folded.sac_2_DISP.1' in ftan_output_list:
-        return FTANDirectory + f'/{stat2}_{stat1}_Folded.sac_2_DISP.1'
+    if f'{FTANDirectory}/{stat2}_{stat1}_Folded.sac_1_DISP.1' in ftan_output_list:
+        return FTANDirectory + f'/{stat2}_{stat1}_Folded.sac_1_DISP.1'
 
     return None
 
@@ -722,6 +742,8 @@ def setupFTANDirectory(FMSTDirectory,period,projectCode,component,_overwrite=Fal
 
 def getAvgVelocity(period,df,component):
     """Uses the phase velocity DataFrame to find the average velocity for that period"""
+    if df.empty is True:
+        raise ValueError('Empty DataFrame given to getAvgVelocity')
     try:
         vels = df[f'{float(period)}s'].to_list()
     except KeyError:
@@ -1167,8 +1189,20 @@ def reset_FMST_directory(dataDirectory: str,
                          smoothing: float,
                          lon_grids: int,
                          lat_grids: int,
-                         colorbar_margin: float=0.2):
+                         colorbar_margin: float=0.2,
+                         included_networks=None):
     """Sets up a properly formatted FMST directory"""
+
+    if included_networks is not None:
+        print('WARNING: included networks is defined, meaning certain networks may be excluded. Set to None to use all')
+        if isinstance(included_networks,list) != True:
+            raise TypeError('included_networks must be a list of strings, where each string is a station')
+        else:
+            for _net_ in included_networks:
+                if isinstance(_net_, str) != True:
+                    raise TypeError('included_networks must be a list of strings, where each string is a station')
+
+
     tomoDirectory = getTomoDirectory(dataDirectory,component) + f'/{period}s'
     fmstPath = setupFTANDirectory(FMSTDirectory=fmstDirectory,
                                                 period=period,
@@ -1181,6 +1215,15 @@ def reset_FMST_directory(dataDirectory: str,
                             _overwrite=False)
 
     df = pd.read_csv(f'{ftanDirectory}/PhaseVelocities_SNR{snr}_WL{min_wavelengths}.csv')
+
+    # We want to use the new average velocity if we only use certain networks
+    if included_networks is not None:
+        for _network in included_networks:
+            df = df[df.Station1.str.contains('|'.join(_network))]
+            df = df[df.Station2.str.contains('|'.join(_network))]
+
+    if df.empty is True:
+        raise ValueError('Read in Phase Velocity CSV is empty. Check that FTAN/Folded is correct')
 
     avgPhvel = getAvgVelocity(period,df,'ZZ')
 
@@ -1351,6 +1394,16 @@ def plot_tradeoff_curve(outputs_file):
     ax.set_title('Misfit vs. Variance, Damping')
 
     plt.show()
+
+def get_grid_spacing(bound_box,lon_grids,lat_grids):
+    lon_deg = abs(bound_box[3] - bound_box[2]) / lon_grids
+    lat_deg = abs(bound_box[1] - bound_box[0]) / lat_grids
+    lon_km = lon_deg * 111
+    lat_km = lat_deg * 111
+
+    print(f'=====================STATION SPACING=============================')
+    print(f'Longitude Spacing | Degrees: {lon_deg}, Kilometers: ~{lon_km}')
+    print(f'Latitude Spacing | Degrees: {lat_deg}, Kilometers: ~{lat_km}')
 
 
 
