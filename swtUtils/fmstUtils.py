@@ -143,14 +143,21 @@ def getValidStations(
         {network.station : (lat,lon).
 
     """
-    _client = Client(client)
-    inventory = _client.get_stations(network = network,
-                                    station = '*',
-                                    channel = channel,
-                                    minlatitude = bounds[0],
-                                    maxlatitude = bounds[1],
-                                    minlongitude = bounds[2],
-                                    maxlongitude = bounds[3])
+    if isinstance(client,str):
+        client = [client]
+
+    inventory = Inventory()
+    for cl in client:
+        _client = Client(cl)
+        _inventory = _client.get_stations(network = network,
+                                        station = '*',
+                                        channel = channel,
+                                        minlatitude = bounds[0],
+                                        maxlatitude = bounds[1],
+                                        minlongitude = bounds[2],
+                                        maxlongitude = bounds[3])
+
+        inventory += _inventory
 
     inventoryCopy = inventory.copy()
 
@@ -457,6 +464,9 @@ def makeFMSTInputs(stationDict,
         for coords in stationDict.values():
             file.write(f'{coords[0]} {coords[1]}\n')
         file.close()
+
+    if not os.path.isfile(receiverFile):
+        raise RuntimeError('Receiver file was not successfully written')
 
     # Create source file
     open(sourcesFile,'w',encoding='utf-8').close()
